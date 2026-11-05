@@ -17,6 +17,7 @@ export function BoasVindas() {
   const concluir = async () => {
     const perfil = { nichos, pais, nivel, concluido: true };
     await post('/api/prefs', perfil);
+    for (const n of nichos.slice(0, 3)) post('/api/foco', { nicho: n, pais }).catch(() => {});
     localStorage.paisAtual = pais;
     definir({ perfil, pais });
     aviso('Tudo pronto. Estas são as ofertas para você.');

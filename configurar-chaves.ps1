@@ -40,6 +40,18 @@ function Testar($nome, $bloco) {
 }
 
 Write-Host ''
+Write-Host '0) Robo em tempo real (recomendado): o painel acorda o robo na hora em que voce escolhe um nicho' -ForegroundColor Cyan
+Write-Host '   a) Abra https://github.com/settings/personal-access-tokens/new'
+Write-Host '   b) Token name: minerador-painel | Expiration: escolha a maior (ou "No expiration")'
+Write-Host '   c) Repository access: "Only select repositories" > minerador-ofertas'
+Write-Host '   d) Permissions > Repository permissions > Actions: "Read and write" (so isso) > Generate token > copie'
+$k = LerOculto 'Token do GitHub (ou Enter para pular)'
+if ($k -and (Testar 'GITHUB_TOKEN' { Invoke-RestMethod "https://api.github.com/repos/$repo/actions/workflows" -Headers @{ Authorization = "Bearer $k"; 'User-Agent' = 'minerador' } })) {
+  Gravar 'GITHUB_TOKEN' $k -SoVercel
+  Gravar 'GITHUB_REPO' $repo -SoVercel
+}
+
+Write-Host ''
 Write-Host '1) Gemini (IA principal, gratis, sem cartao)' -ForegroundColor Cyan
 Write-Host '   Abra https://aistudio.google.com/apikey > "Create API key" > copie.'
 $k = LerOculto 'Chave do Gemini (ou Enter para pular)'

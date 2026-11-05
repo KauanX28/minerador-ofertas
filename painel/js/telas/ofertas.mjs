@@ -1,6 +1,7 @@
 // Feed de ofertas (cards ou tabela), filtros no servidor, atalhos e comparação lado a lado.
 import { useState } from 'preact/hooks';
-import { html, loja, useLoja, useDados, useParams, nomePais, fmt, TIPOS_OFERTA, STATUS, exportarCSV, exportarXLSX, bib, brl } from '../base.mjs';
+import { html, loja, useLoja, useDados, useParams, nomePais, fmt, TIPOS_OFERTA, STATUS, exportarCSV, exportarXLSX, bib, brl, rodarTarefa } from '../base.mjs';
+import { FocoNicho } from '../foco.mjs';
 import { Ic, CartaoOferta, Tabela, Esqueleto, Vazio, Erro, Status, Gws, Preco, Score, Spark, Ent, Estrela, Paginacao, Abas, comparar, Grafico } from '../ui.mjs';
 
 const ATALHOS = [
@@ -22,10 +23,12 @@ export function TelaOfertas() {
     vsl: '', quiz: '', checkout: '', plr: '', acelerando: '', gringa: '', gateway: '', min: '', dias: '', busca: '', ordem: 'score', visao: 'cards', pagina: '1' };
   const [f, mudar] = useParams(padrao);
   const [maisFiltros, setMais] = useState(false);
+  const [versao, setVersao] = useState(0); // sobe quando o robô traz dados novos (recarrega a lista)
+  const [aoVivo, setAoVivo] = useState(false);
   const qs = new URLSearchParams({ tipo: f.tipo, precoMax: f.preco, semPreco: f.sempreco, idioma: f.idioma, nicho: f.nicho, status: f.status, funil: f.funil, formato: f.formato,
     vsl: f.vsl, quiz: f.quiz, checkout: f.checkout, plr: f.plr, acelerando: f.acelerando, gringa: f.gringa, gateway: f.gateway, min: f.min, dias: f.dias, busca: f.busca,
     ordem: f.ordem, pagina: f.pagina, por: 48 }).toString();
-  const r = useDados(f.aba === 'anunciantes' ? '/api/paginas?' + qs : '/api/ofertas-agrupadas?' + qs, [qs, f.aba]);
+  const r = useDados(f.aba === 'anunciantes' ? '/api/paginas?' + qs : '/api/ofertas-agrupadas?' + qs, [qs, f.aba, versao]);
   const atalho = ATALHOS.find(([, , v]) => Object.entries(v).every(([k, x]) => (f[k] || '') === x))?.[0];
   const ativos = ['idioma', 'nicho', 'status', 'funil', 'formato', 'vsl', 'quiz', 'checkout', 'gateway', 'min', 'dias'].filter((k) => f[k]).length;
   const check = (k, rot) => html`<label class="check-l"><input type="checkbox" checked=${f[k] === '1'} onChange=${(e) => mudar({ [k]: e.target.checked ? '1' : '' })} /> ${rot}</label>`;
@@ -39,6 +42,7 @@ export function TelaOfertas() {
     <div class="atalhos">${ATALHOS.map(([k, nome, v]) => html`<button class=${'chip grande' + (atalho === k ? ' on' : '')} aria-pressed=${atalho === k} onClick=${() => mudar(v)}>${nome}</button>`)}</div>
     <div class="barra-filtros">
       <label class="campo-inline"><${Ic} n="busca" /><input placeholder="Filtrar por nome, produto ou site" value=${f.busca} onChange=${(e) => mudar({ busca: e.target.value })} /></label>
+      <select value=${f.nicho} onChange=${(e) => mudar({ nicho: e.target.value })} aria-label="Nicho" class="sel-nicho"><option value="">Todos os nichos</option>${Object.keys(l.config?.nichos || {}).map((n) => html`<option>${n}</option>`)}</select>
       <select value=${f.preco} onChange=${(e) => mudar({ preco: e.target.value })} aria-label="Preço máximo">${[['27', 'Até R$ 27'], ['47', 'Até R$ 47'], ['97', 'Até R$ 97'], ['197', 'Até R$ 197'], ['0', 'Qualquer preço']].map(([v, t]) => html`<option value=${v}>${t}</option>`)}</select>
       ${f.aba === 'anunciantes' ? html`<select value=${f.ordem} onChange=${(e) => mudar({ ordem: e.target.value })} aria-label="Ordenar">${ORDENS.map(([v, t]) => html`<option value=${v}>${t}</option>`)}</select>` : null}
       <button class=${maisFiltros || ativos ? 'on' : ''} onClick=${() => setMais(!maisFiltros)}><${Ic} n="filtro" /> Filtros${ativos ? ` (${ativos})` : ''}</button>
@@ -62,10 +66,13 @@ export function TelaOfertas() {
         <label class="check-l"><input type="checkbox" checked=${f.sempreco === '1'} onChange=${(e) => mudar({ sempreco: e.target.checked ? '1' : '0' })} /> incluir quem ainda não tem preço lido</label></div>
       <div class="campo"><span> </span><button class="fantasma" onClick=${() => mudar(Object.fromEntries(Object.keys(padrao).filter((k) => !['aba', 'visao'].includes(k)).map((k) => [k, padrao[k]])))}>Limpar filtros</button></div>
     </div></div>` : null}
+    ${f.nicho && f.nicho !== 'Avulso' ? html`<${FocoNicho} nicho=${f.nicho} onAtualizar=${() => setVersao((v) => v + 1)} onEstado=${setAoVivo} />` : null}
     ${f.gringa === '1' && l.pais === 'BR' ? html`<div class="dica">Escolha um país de fora (EUA, México, Espanha…) no seletor do topo: este atalho mostra ofertas de lá que ainda não rodam no Brasil.</div>` : null}
     ${r.erro ? html`<${Erro} msg=${r.erro} />` : !formatoOk ? html`<${Esqueleto} cards=${f.visao === 'cards' && f.aba === 'anunciantes' ? 12 : 0} linhas=${10} />` : f.aba === 'checkout' ? html`<${ListaCheckout} lista=${itens} />` : html`
       <div class="barra-res"><span class="mut">${fmt(r.dados.total)} ofertas${r.carregando ? ' · atualizando…' : ''}</span></div>
-      ${!itens.length ? html`<${Vazio} titulo="Nenhuma oferta com esses filtros" texto=${f.tipo ? 'Tente "Qualquer preço" ou o atalho Infoproduto. Ofertas sem classificação aparecem em Filtros → Tipo → Todos.' : 'Mude os filtros ou minere novas palavras.'}
+      ${!itens.length && f.busca ? html`<div class="foco"><div><b>Nada salvo com "${f.busca}" ainda.</b><div class="mut peq">O robô pode buscar agora na Biblioteca de Anúncios.</div></div><button class="pri" onClick=${() => rodarTarefa({ tipo: 'minerar', palavras: f.busca, nicho: 'Avulso', pais: l.pais })}>Buscar "${f.busca}" agora</button></div>` : null}
+      ${!itens.length && aoVivo && f.nicho ? html`<${Vazio} titulo="Buscando agora…" texto="As ofertas deste nicho aparecem aqui em instantes, conforme o robô lê a Biblioteca de Anúncios." />`
+      : !itens.length ? html`<${Vazio} titulo="Nenhuma oferta com esses filtros" texto=${f.tipo ? 'Tente "Qualquer preço" ou o atalho Infoproduto. Ofertas sem classificação aparecem em Filtros → Tipo → Todos.' : 'Mude os filtros ou minere novas palavras.'}
         acao="Limpar filtros" onAcao=${() => mudar(Object.fromEntries(Object.keys(padrao).filter((k) => !['aba', 'visao'].includes(k)).map((k) => [k, padrao[k]])))} />`
       : f.visao === 'cards' ? html`<div class="feed">${itens.map((p) => html`<${CartaoOferta} p=${p} selecionado=${l.comparar.includes(p.page_id)} onSelecionar=${comparar.alternar} />`)}</div>`
       : html`<div class="painel-box"><${TabelaOfertas} itens=${itens} /></div>`}

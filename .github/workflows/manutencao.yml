@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: minerador        # nunca roda junto com o robô (evita disputa de bloqueio no banco)
+  group: minerador-rotina   # nunca roda junto com a rotina do robô (evita disputa de bloqueio no banco)
   cancel-in-progress: false
 
 permissions:

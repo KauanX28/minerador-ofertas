@@ -439,3 +439,9 @@ label.botao { width: fit-content; font-size: 13px; }
 @media print { #menu, #topo, .barra-comparar, .cab button { display: none !important; } main { padding: 0; } body { background: #fff; } }
 
 .expirou { position: relative; } .expirou button { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); white-space: nowrap; }
+
+/* foco em tempo real */
+.foco { display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--sup); border: 1px solid var(--borda); border-radius: var(--raio); padding: 10px 14px; margin: 0 0 12px; }
+.foco.ao-vivo { justify-content: flex-start; border-color: var(--pri); background: var(--pri-s); }
+.foco .ponto { margin-top: 2px; background: var(--erro); }
+.sel-nicho { max-width: 220px; font-weight: 500; }

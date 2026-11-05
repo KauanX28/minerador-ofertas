@@ -38,10 +38,15 @@ const NUVEM = !!process.env.VERCEL || process.env.MODO === 'nuvem';
 
 // ----- execução de tarefas -----
 // Local: roda o coletor como processo filho. Nuvem: grava na fila e aciona o GitHub Actions.
-const local = { rodando: false, tipo: null, descricao: '', log: [], inicio: null, fim: null, codigo: null };
+const local = { rodando: false, tipo: null, descricao: '', log: [], inicio: null, fim: null, codigo: null, fila: [] };
 
-function rodarLocal(tipo, args, descricao) {
-  if (local.rodando) return false;
+// No modo local roda um pedido por vez; os outros esperam numa fila e começam sozinhos em seguida.
+function rodarLocal(tipo, args, descricao, { enfileirar = false } = {}) {
+  if (local.rodando) {
+    if (!enfileirar) return false;
+    if (local.descricao !== descricao && !local.fila.some((x) => x.descricao === descricao)) local.fila.push({ tipo, args, descricao });
+    return true;
+  }
   Object.assign(local, { rodando: true, tipo, descricao, log: [], inicio: Date.now(), fim: null, codigo: null });
   const p = spawn(process.execPath, ['--no-warnings', path.join(raiz, 'src', 'tarefa.js'), tipo, ...args], {
     cwd: raiz, env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
@@ -49,19 +54,38 @@ function rodarLocal(tipo, args, descricao) {
   const add = (b) => { for (const l of b.toString().split(/\r?\n/)) if (l.trim()) local.log.push(l); local.log = local.log.slice(-500); };
   p.stdout.on('data', add);
   p.stderr.on('data', add);
-  p.on('close', (c) => Object.assign(local, { rodando: false, fim: Date.now(), codigo: c }));
+  p.on('close', (c) => {
+    Object.assign(local, { rodando: false, fim: Date.now(), codigo: c });
+    const prox = local.fila.shift();
+    if (prox) rodarLocal(prox.tipo, prox.args, prox.descricao);
+  });
   return true;
 }
 
 async function acionarGithub() {
   const { GITHUB_TOKEN: token, GITHUB_REPO: repo } = process.env;
+  const vivo = Number((await get("SELECT valor FROM ajustes WHERE chave = 'fila_viva'").catch(() => null))?.valor || 0);
+  if (Date.now() / 1000 - vivo < 25) return 'o robô já está de prontidão: começa em segundos';
   if (!token || !repo) return 'sem GITHUB_TOKEN/GITHUB_REPO: a fila será processada na próxima rodada agendada';
   const r = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/minerador.yml/dispatches`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'minerador-ofertas' },
     body: JSON.stringify({ ref: process.env.GITHUB_REF || 'main', inputs: { tarefa: 'fila' } }),
   });
-  return r.ok ? 'robô acionado no GitHub Actions (começa em ~1 min)' : `falha ao acionar GitHub (${r.status})`;
+  return r.ok ? 'robô acionado (começa em cerca de 1 minuto; depois fica de prontidão por 10 minutos)' : `falha ao acionar GitHub (${r.status})`;
+}
+
+// Põe um pedido na fila (nuvem) ou roda na hora (modo local).
+async function enfileirar(b, origem = 'painel') {
+  const m = montarArgs(b);
+  if (!m) return { erro: 'tipo inválido' };
+  if (!NUVEM) {
+    const naFila = local.rodando && local.descricao !== m.desc;
+    return { iniciado: rodarLocal(b.tipo, m.args, m.desc, { enfileirar: origem === 'foco' }), tarefa: local, aviso: naFila && origem === 'foco' ? 'na fila: começa quando o robô terminar a busca atual' : undefined };
+  }
+  const ja = await get("SELECT id FROM tarefas WHERE descricao = ? AND status IN ('pendente', 'rodando')", [m.desc]);
+  if (!ja) await run('INSERT INTO tarefas (tipo, args, descricao, user_id, origem, criado) VALUES (?, ?, ?, ?, ?, ?)', [b.tipo, JSON.stringify(m.args), m.desc, uid(), origem, agora()]);
+  return { iniciado: true, aviso: await acionarGithub() };
 }
 
 async function estadoTarefa() {
@@ -85,7 +109,8 @@ function montarArgs(b) {
     if (b.palavras) a.push('--palavras', String(b.palavras), '--nicho', String(b.nicho || 'Avulso'));
     else if (b.nicho) a.push('--nicho', String(b.nicho));
     if (b.max) a.push('--max', String(b.max));
-    desc = b.palavras ? `Minerando: ${b.palavras}` : `Minerando nicho ${b.nicho || 'todos'}`;
+    if (b.top) a.push('--top', String(b.top)); if (b.sites != null) a.push('--sites', String(b.sites));
+    desc = b.palavras ? `Minerando: ${b.palavras}` : `Minerando nicho ${b.nicho || 'todos'} (${String(b.pais || 'BR').toUpperCase()})`;
   } else if (b.tipo === 'gateway') {
     a.push('--gateway', String(b.gateway)); if (b.max) a.push('--max', String(b.max));
     desc = `Ofertas mais anunciadas em ${b.gateway}`;
@@ -427,13 +452,27 @@ Dados: ${JSON.stringify(dados).slice(0, 6000)}`;
     }
 
     if (rota === '/api/tarefa' && req.method === 'POST') {
-      const b = await corpo(req);
-      const m = montarArgs(b);
-      if (!m) return json(res, { erro: 'tipo inválido' }, 400);
-      if (!NUVEM) return json(res, { iniciado: rodarLocal(b.tipo, m.args, m.desc), tarefa: local });
-      await run('INSERT INTO tarefas (tipo, args, descricao, user_id, origem, criado) VALUES (?, ?, ?, ?, ?, ?)',
-        [b.tipo, JSON.stringify(m.args), m.desc, uid(), 'painel', agora()]);
-      return json(res, { iniciado: true, aviso: await acionarGithub() });
+      const r = await enfileirar(await corpo(req));
+      return json(res, r, r.erro ? 400 : 200);
+    }
+    if (rota === '/api/foco') {
+      // Foco num nicho: ao escolher o nicho no painel, o robô busca ofertas dele na hora (se não buscou nas últimas 6 h).
+      const b = req.method === 'POST' ? await corpo(req) : q;
+      const nicho = String(b.nicho || ''), paisF = String(b.pais || pais).toUpperCase();
+      if (!nicho) return json(res, { erro: 'informe o nicho' }, 400);
+      const desc = `Minerando nicho ${nicho} (${paisF})`;
+      const tarefa = NUVEM ? await get('SELECT id, status, log, inicio, fim, criado FROM tarefas WHERE descricao = ? ORDER BY id DESC LIMIT 1', [desc])
+        : local.descricao === desc ? { status: local.rodando ? 'rodando' : 'concluido', log: local.log.join('\n'), inicio: local.inicio / 1000, fim: local.fim ? local.fim / 1000 : null }
+        : local.fila.some((x) => x.descricao === desc) ? { status: 'pendente', log: `Na fila: o robô está terminando "${local.descricao}"` } : null;
+      const ultima = (await get('SELECT MAX(quando) q FROM buscas WHERE nicho = ? AND pais = ?', [nicho, paisF]))?.q || null;
+      const estado = { nicho, pais: paisF, ultimaBusca: ultima, status: tarefa?.status || null, rodando: ['pendente', 'rodando'].includes(tarefa?.status),
+        log: String(tarefa?.log || '').split('\n').filter(Boolean).slice(-6), viva: Date.now() / 1000 - Number((await get("SELECT valor FROM ajustes WHERE chave = 'fila_viva'"))?.valor || 0) < 25 };
+      if (req.method !== 'POST') return json(res, estado);
+      if (estado.rodando) return json(res, { ...estado, aviso: 'o robô já está buscando este nicho' });
+      if (!b.forcar && ultima && agora() - ultima < 6 * 3600) return json(res, { ...estado, recente: true });
+      if (!(await lerConfig()).nichos?.[nicho]) return json(res, { erro: 'nicho não existe nas Configurações' }, 400);
+      const r = await enfileirar({ tipo: 'minerar', nicho, pais: paisF, top: 12, sites: 3 }, 'foco');
+      return json(res, { ...estado, ...r, rodando: !!r.iniciado, status: 'pendente' });
     }
     if (rota === '/api/tarefa') return json(res, await estadoTarefa());
     if (rota === '/api/historico-tarefas') return json(res, await all('SELECT id, tipo, descricao, status, erro, criado, inicio, fim FROM tarefas ORDER BY id DESC LIMIT 30'));

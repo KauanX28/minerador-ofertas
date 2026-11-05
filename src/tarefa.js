@@ -18,7 +18,7 @@ import { fechar, usaPostgres } from './banco.js';
 import { alertar } from './alerta.js';
 import { processarMiniaturas, limparMiniaturas } from './midia.js';
 import { usoELimites } from './uso.js';
-import { enriquecerTudo } from './enriquecer.js';
+import { enriquecerTudo, classificarAnunciantes } from './enriquecer.js';
 import { validarDominio } from './validacao.js';
 import { rankingPaginas } from './score.js';
 import { gerar, provedores, promptAnaliseCriativo, validarAnalise } from './ia.js';
@@ -179,6 +179,7 @@ async function minerar(ctx, o) {
       await salvarBusca({ palavra, nicho, pais: o.pais, total: r.total, coletados: r.anuncios.length });
       for (const a of r.anuncios) contagem.set(a.page_id, (contagem.get(a.page_id) || 0) + 1 + Math.log2(a.dup || 1));
       log(`  ${r.anuncios.length} anúncios lidos de ~${r.total ?? '?'} no total`);
+      await classificarAnunciantes().catch(() => {}); // já aparecem no painel (tipo de oferta) sem esperar o fim
       await pausa();
     }
     const candidatas = [...contagem.entries()].sort((a, b) => b[1] - a[1]).slice(0, top).map(([id]) => id);
@@ -300,9 +301,18 @@ async function pegarTarefa() {
 async function processarFila(ctx, o) {
   // Pedidos presos em "rodando" por mais de 2 h (robô caiu) voltam para a fila.
   await run("UPDATE tarefas SET status = 'pendente' WHERE status = 'rodando' AND inicio < ? AND tentativas < 3", [agora() - 7200]);
+  const esperar = Number(o.esperar || 0) * 60000; // modo prontidão (workflow "fila"): segue vivo esperando pedidos
+  const batimento = (v) => run("INSERT INTO ajustes (chave, valor) VALUES ('fila_viva', ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor", [String(v)]).catch(() => {});
+  let ocioso = Date.now();
   for (;;) {
     const item = await pegarTarefa();
-    if (!item) return;
+    if (!item) {
+      if (!esperar) return;
+      if (Date.now() - ocioso > esperar) { await batimento(0); if (!(await get("SELECT 1 FROM tarefas WHERE status = 'pendente'"))) return; continue; }
+      await batimento(agora()); await new Promise((r) => setTimeout(r, 4000)); continue;
+    }
+    await batimento(agora());
+    const pulso = esperar ? setInterval(() => batimento(agora()), 10000) : null;
     const linhas = [];
     const logOriginal = log;
     let ultimoFlush = 0;
@@ -318,8 +328,11 @@ async function processarFila(ctx, o) {
     } catch (e) { status = 'erro'; erro = e.message; log(`!! ${e.message}`); if (e instanceof BloqueioError) throw e; }
     finally {
       log = logOriginal;
+      if (pulso) clearInterval(pulso);
       await run('UPDATE tarefas SET status = ?, fim = ?, erro = ?, log = ? WHERE id = ?', [status, agora(), erro, linhas.slice(-300).join('\n'), item.id]);
     }
+    // No modo prontidão, preço/ofertas agrupadas são atualizados a cada pedido (sem esperar o robô encerrar).
+    if (esperar) { await enriquecerTudo({ log }).catch(() => {}); ocioso = Date.now(); }
   }
 }
 

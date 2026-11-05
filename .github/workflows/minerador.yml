@@ -12,8 +12,9 @@ on:
         description: 'rotina (completa) ou fila (só os pedidos do painel)'
         default: 'rotina'
 
+# A rotina e os pedidos do painel ("fila") rodam em paralelo: um pedido nunca espera a rotina terminar.
 concurrency:
-  group: minerador
+  group: minerador-${{ github.event.inputs.tarefa == 'fila' && 'fila' || 'rotina' }}
   cancel-in-progress: false
 
 jobs:
@@ -32,10 +33,17 @@ jobs:
         with:
           path: .cache/modelos
           key: modelo-e5-small-v1
+      - name: Cache do navegador
+        id: cache-navegador
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('package-lock.json') }}
       - name: Instalar navegador
+        if: steps.cache-navegador.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
       - name: Rodar tarefa
-        run: node --no-warnings src/tarefa.js ${{ github.event.inputs.tarefa || 'rotina' }}
+        run: node --no-warnings src/tarefa.js ${{ github.event.inputs.tarefa || 'rotina' }} ${{ github.event.inputs.tarefa == 'fila' && '--esperar 10' || '' }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}

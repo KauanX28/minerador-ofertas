@@ -1,12 +1,15 @@
 // Início guiado: os 4 passos (encontrar → validar → modelar → escalar) e as ofertas do dia para o perfil do usuário.
 import { html, useLoja, useDados, nomePais, fmt, relativo } from '../base.mjs';
 import { Ic, CartaoOferta, Esqueleto, Vazio, Erro } from '../ui.mjs';
+import { FocoNicho } from '../foco.mjs';
+import { useState } from 'preact/hooks';
 
 export function TelaInicio() {
   const l = useLoja();
   const nichos = (l.perfil?.nichos || []).join('|');
+  const [versao, setVersao] = useState(0);
   const painel = useDados('/api/painel');
-  const doPerfil = useDados(`/api/paginas?ordem=oportunidade&por=6&nichos=${encodeURIComponent(nichos)}`, [nichos]);
+  const doPerfil = useDados(`/api/paginas?ordem=oportunidade&por=6&nichos=${encodeURIComponent(nichos)}`, [nichos, versao]);
   // Se os nichos escolhidos ainda não têm dados neste país, mostra os melhores de todos os nichos (com aviso).
   const semNicho = !doPerfil.carregando && nichos && !doPerfil.dados?.itens?.length;
   const todos = useDados(semNicho ? '/api/paginas?ordem=oportunidade&por=6' : null, [semNicho]);
@@ -30,6 +33,7 @@ export function TelaInicio() {
     <div class="passos">${passos.map(([n, t, sub, acao, href, i]) => html`<a class="passo" href=${href}>
       <span class="num-passo">${n}</span><div><b>${t}</b><span class="mut peq">${sub}</span></div><span class="passo-acao">${acao} <${Ic} n="seta" t=${14} /></span></a>`)}</div>
     ${iniciante ? html`<div class="dica"><b>Como usar:</b> abra uma oferta da lista abaixo, veja os criativos que mais se repetem (são os campeões), salve na sua lista e use "Modelar" para criar a sua versão. A nota de cada oferta explica o porquê ao passar o mouse.</div>` : null}
+    ${l.perfil?.nichos?.[0] ? html`<${FocoNicho} nicho=${l.perfil.nichos[0]} onAtualizar=${() => setVersao((v) => v + 1)} />` : null}
     <section class="secao"><div class="secao-cab"><h2>Melhores para modelar hoje</h2><a class="peq" href="/ofertas?ordem=oportunidade">Ver todas</a></div>
       ${semNicho && todos.dados?.itens?.length ? html`<p class="mut peq" style="margin-top:-4px">Seus nichos ainda não têm ofertas coletadas em ${nomePais(l.pais)}; mostrando todos. O robô inclui seus nichos no rodízio.</p>` : null}
       ${paraVoce.carregando ? html`<${Esqueleto} cards=${6} />` : paraVoce.dados?.itens?.length ? html`<div class="feed">${paraVoce.dados.itens.map((p) => html`<${CartaoOferta} p=${p} />`)}</div>`
