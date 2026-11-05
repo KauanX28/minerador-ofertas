@@ -33,14 +33,25 @@ Write-Host '2) Alertas no Telegram (opcional - aperte Enter para pular)' -Foregr
 Write-Host '   No Telegram, fale com @BotFather > /newbot > copie o token. Depois mande uma mensagem para o seu bot.'
 $tg = LerOculto 'Token do bot (ou Enter para pular)'
 if ($tg) {
-  Gravar 'TELEGRAM_BOT_TOKEN' $tg
-  try {
-    $up = Invoke-RestMethod "https://api.telegram.org/bot$tg/getUpdates"
-    $chat = ($up.result | Select-Object -Last 1).message.chat.id
-  } catch { $chat = $null }
-  if (-not $chat) { $chat = Read-Host 'Nao achei sua conversa com o bot. Mande uma mensagem para ele e digite aqui o chat_id (ou Enter para pular)' }
-  Gravar 'TELEGRAM_CHAT_ID' "$chat"
-  if ($chat) { Invoke-RestMethod -Method Post "https://api.telegram.org/bot$tg/sendMessage" -Body @{ chat_id = $chat; text = 'Minerador: alertas ligados.' } | Out-Null }
+  try { $bot = (Invoke-RestMethod "https://api.telegram.org/bot$tg/getMe").result.username } catch { $bot = $null }
+  if (-not $bot) { Write-Host '  Token invalido. Confira o token enviado pelo @BotFather.' -ForegroundColor Red }
+  else {
+    Gravar 'TELEGRAM_BOT_TOKEN' $tg
+    Write-Host "`n  Agora abra https://t.me/$bot no Telegram, toque em INICIAR (ou mande qualquer mensagem)." -ForegroundColor Yellow
+    Write-Host '  Esperando a sua mensagem (ate 3 minutos)...'
+    $chat = $null
+    for ($i = 0; $i -lt 36 -and -not $chat; $i++) {
+      try {
+        $up = Invoke-RestMethod "https://api.telegram.org/bot$tg/getUpdates"
+        $chat = ($up.result | Where-Object { $_.message } | Select-Object -Last 1).message.chat.id
+      } catch { }
+      if (-not $chat) { Start-Sleep -Seconds 5 }
+    }
+    if ($chat) {
+      Gravar 'TELEGRAM_CHAT_ID' "$chat"
+      try { Invoke-RestMethod -Method Post "https://api.telegram.org/bot$tg/sendMessage" -Body @{ chat_id = $chat; text = 'Minerador: alertas ligados.' } | Out-Null; Write-Host '  Mensagem de teste enviada para o seu Telegram.' -ForegroundColor Green } catch { }
+    } else { Write-Host '  Nao recebi sua mensagem. Rode o script de novo quando quiser (Enter pula a chave do Supabase).' -ForegroundColor Red }
+  }
 }
 
 Write-Host "`nPronto. O robo usa os segredos a partir da proxima rodada." -ForegroundColor Green
