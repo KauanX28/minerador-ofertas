@@ -157,4 +157,13 @@ export const MIGRACOES = [
       await rls(ctx, ['ia_cache', 'transcricoes']);
     },
   },
+  {
+    versao: 8,
+    nome: 'fases 6 a 8: projetos do usuário (entregável, página, quiz, diário de testes)',
+    up: async (ctx) => {
+      await ctx.ddl(`CREATE TABLE IF NOT EXISTS projetos (id ${id(ctx.pg)}, user_id TEXT NOT NULL DEFAULT '', tipo TEXT NOT NULL, titulo TEXT, dados TEXT, criado BIGINT, atualizado BIGINT);
+        CREATE INDEX IF NOT EXISTS ix_projetos_user ON projetos(user_id, tipo);`);
+      await rls(ctx, ['projetos']);
+    },
+  },
 ];

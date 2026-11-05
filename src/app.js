@@ -275,6 +275,24 @@ Responda APENAS JSON em português: {"resumo": "3 frases", "estruturas_de_hook":
 Dados: ${JSON.stringify(dados).slice(0, 6000)}`;
       return json(res, await ia.gerar({ tarefa: 'padroes', entrada, prompt }));
     }
+    if (rota.startsWith('/api/projetos')) {
+      // Projetos do usuário: /api/projetos?tipo=entregavel, /api/projetos/123 (GET/POST/DELETE), /api/projetos/ia (etapas com IA).
+      const pj = await import('./projetos.js');
+      if (rota === '/api/projetos/ia' && req.method === 'POST') {
+        const b = await corpo(req);
+        if (b.tipo === 'entregavel') return json(res, await pj.iaEntregavel(b.etapa, b.dados || {}));
+        if (b.tipo === 'pagina' || b.tipo === 'quiz') { const pg = await import('./paginas.js'); return json(res, await pg.iaPagina(b.tipo, b.etapa, b.dados || {})); }
+        return json(res, { erro: 'tipo inválido' }, 400);
+      }
+      const idP = rota.split('/')[3];
+      if (!idP) {
+        if (req.method === 'POST') { const b = await corpo(req); return json(res, await pj.salvarProjeto(b)); }
+        return json(res, await pj.listarProjetos(String(q.tipo || 'entregavel')));
+      }
+      if (req.method === 'DELETE') { await pj.apagarProjeto(idP); return json(res, { ok: true }); }
+      if (req.method === 'POST') { const b = await corpo(req); return json(res, await pj.salvarProjeto({ ...b, id: idP })); }
+      return json(res, (await pj.lerProjeto(idP)) || { erro: 'não encontrado' }, 200);
+    }
     if (rota === '/api/prefs' && req.method === 'GET') {
       const r = await get("SELECT valor FROM prefs WHERE user_id = ? AND chave = 'perfil'", [uid()]);
       return json(res, r ? JSON.parse(r.valor) : {});

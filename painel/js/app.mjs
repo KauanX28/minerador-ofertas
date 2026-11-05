@@ -19,13 +19,14 @@ import { BoasVindas } from './telas/boasvindas.mjs';
 import { TelaEditor } from './telas/editor.mjs';
 import { TelaVideo } from './telas/video.mjs';
 import { TelaReferencias } from './telas/referencias.mjs';
+import { TelaEntregaveis, TelaEntregavel } from './telas/entregavel.mjs';
 
 // O menu segue o caminho de trabalho: encontrar → validar → modelar → escalar.
 const MENU = [
   [null, [['/', 'Início', 'inicio']]],
   ['1 · Encontrar', [['/ofertas', 'Ofertas escaladas', 'ofertas'], ['/criativos', 'Criativos', 'anuncios'], ['/gateways', 'Gateways', 'gateways']]],
   ['2 · Validar', [['/sites', 'Análise de site', 'dominio']]],
-  ['3 · Modelar', [['/prompts', 'Prompts de modelagem', 'prompts'], ['/editor', 'Editor de criativo', 'anuncios'], ['/video', 'Vídeo simples', 'raio'], ['/referencias', 'Referências salvas', 'estrela']]],
+  ['3 · Modelar', [['/prompts', 'Prompts de modelagem', 'prompts'], ['/editor', 'Editor de criativo', 'anuncios'], ['/video', 'Vídeo simples', 'raio'], ['/referencias', 'Referências salvas', 'estrela'], ['/entregavel', 'Entregável', 'metodo']]],
   ['4 · Escalar', [['/calculadoras', 'Calculadoras e plano', 'calc']]],
   ['Trabalho', [['/listas', 'Minhas listas', 'listas']]],
 ];
@@ -52,6 +53,8 @@ const ROTAS = [
   [/^\/editor$/, () => html`<${TelaEditor} />`],
   [/^\/video$/, () => html`<${TelaVideo} />`],
   [/^\/referencias$/, () => html`<${TelaReferencias} />`],
+  [/^\/entregavel$/, () => html`<${TelaEntregaveis} />`],
+  [/^\/entregavel\/(\d+)$/, (m) => html`<${TelaEntregavel} id=${m[1]} />`],
 ];
 
 function Menu({ caminho, aberto, onFechar }) {

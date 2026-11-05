@@ -419,3 +419,15 @@ a.chip { color: var(--txt2); } a.chip:hover { text-decoration: none; border-colo
 .barra-h i b { display: block; height: 100%; background: var(--pri); } .barra-h small { text-align: right; }
 textarea { font-family: var(--fonte); }
 label.botao { width: fit-content; font-size: 13px; }
+
+/* entregável */
+.titulo-edit { font-size: 20px; font-weight: 700; border: 1px solid transparent; background: transparent; padding: 2px 6px; margin-left: -6px; min-width: 320px; }
+.titulo-edit:hover, .titulo-edit:focus { border-color: var(--borda2); background: var(--sup); }
+.conteudo-ent { display: grid; grid-template-columns: 260px 1fr; gap: 14px; align-items: start; }
+.conteudo-ent .nichos-lista { border: 1px solid var(--borda); border-radius: var(--raio); background: var(--sup); }
+.editor-rico { border: 1px solid var(--borda); border-radius: var(--raio); background: var(--sup); }
+.barra-rico { display: flex; gap: 4px; padding: 6px; border-bottom: 1px solid var(--borda); flex-wrap: wrap; }
+.doc { min-height: 420px; padding: 18px 22px; line-height: 1.7; outline: none; }
+.doc .ProseMirror { outline: none; min-height: 400px; } .doc h2 { font-size: 20px; } .doc h3 { font-size: 16px; }
+.capa-palco { gap: 12px; flex-wrap: wrap; } .capa-cv { max-height: 520px; max-width: 48%; height: auto; width: auto; border-radius: 4px; }
+@media (max-width: 980px) { .conteudo-ent { grid-template-columns: 1fr; } .capa-cv { max-width: 100%; } }
