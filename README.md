@@ -49,7 +49,7 @@ Dados locais: `dados/minerador.db` (SQLite).
 ## Hospedagem grátis 24h (Vercel + Supabase + GitHub Actions)
 
 ```
-GitHub Actions ── robô com navegador (2x/dia + pedidos do painel) ──┐
+GitHub Actions ── robô com navegador (4x/dia + pedidos do painel) ──┐
                └─ manutenção (diária: migração, retenção, alertas)  │ grava
                                                                      ▼
 Vercel (painel + login) ── lê / enfileira ──► Supabase (Postgres 500 MB + Storage 1 GB + Auth)
@@ -71,7 +71,7 @@ Tudo no plano grátis (Vercel Hobby, Supabase Free, GitHub Free). Projeto atual:
 | Vercel | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | públicos | Login (chave *publishable*, feita para o navegador) |
 | Vercel | `EMAILS_PERMITIDOS` | público | E-mails que podem entrar (o primeiro é o dono) |
 | Vercel | `GITHUB_TOKEN`, `GITHUB_REPO` | segredo, opcional | "Minerar agora" aciona o robô na hora (token *fine-grained* só deste repositório, permissão Actions: Read and write) |
-| Vercel | `LIMITE_MINUTOS_ACTIONS` | opcional | 2000 (privado) ou 0 (público = ilimitado), para a tela Uso e limites |
+| Vercel | `LIMITE_MINUTOS_ACTIONS` | opcional | 0 (padrão, repositório público = ilimitado) ou 2000 se o repositório for privado |
 
 Scripts que pedem os segredos sem mostrá-los na tela (rode no PowerShell, nesta pasta):
 

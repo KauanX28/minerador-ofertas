@@ -45,7 +45,7 @@
     "Low ticket (genérico)": { "pt": ["por apenas R$", "acesso imediato", "garantia de 7 dias", "baixe agora", "pacote com"], "es": ["por solo", "acceso inmediato", "descarga ahora"], "en": ["instant access", "only $", "digital download"] }
   },
   "rotina": {
-    "minutosPorRodada": 25,
+    "minutosPorRodada": 40,
     "paises": ["BR"],
     "gateways": ["hotmart", "kiwify", "cakto", "kirvano", "perfectpay", "ticto", "eduzz", "hubla", "braip", "monetizze"],
     "paginasParaAtualizar": 35,

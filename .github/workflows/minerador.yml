@@ -1,11 +1,11 @@
 # Robô do Minerador rodando de graça no GitHub Actions.
-# - 2 vezes por dia: rotina (pedidos da fila, recontagem das páginas, rodízio de nichos/países/gateways).
+# - 4 vezes por dia: rotina (pedidos da fila, recontagem das páginas, rodízio de nichos/países/gateways).
 # - Sob demanda: o botão "Minerar agora" do painel na Vercel aciona este workflow com tarefa=fila.
 name: minerador
 
 on:
   schedule:
-    - cron: '17 9,21 * * *'   # 6h17 e 18h17 (horário de Brasília) — cabe nos 2.000 min/mês do plano grátis
+    - cron: '17 3,9,15,21 * * *'   # 0h17, 6h17, 12h17 e 18h17 (Brasília). Repositório público: minutos ilimitados
   workflow_dispatch:
     inputs:
       tarefa:

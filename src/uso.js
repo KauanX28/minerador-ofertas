@@ -33,7 +33,7 @@ export async function usoELimites() {
   // Minutos do GitHub Actions (cada execução do robô registra início e fim)
   const minutos = (await get(`SELECT COALESCE(SUM(CASE WHEN fim > inicio THEN fim - inicio ELSE 0 END), 0) AS s, COUNT(*) AS n
     FROM execucoes WHERE origem = 'actions' AND inicio >= ?`, [inicioMes()]));
-  const limiteMin = Number(process.env.LIMITE_MINUTOS_ACTIONS ?? 2000);
+  const limiteMin = Number(process.env.LIMITE_MINUTOS_ACTIONS ?? 0);
 
   // Saúde do raspador nas últimas 24 h
   const desde = Math.floor(Date.now() / 1000) - 86400;

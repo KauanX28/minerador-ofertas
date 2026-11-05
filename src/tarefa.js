@@ -313,7 +313,7 @@ async function processarFila(ctx, o) {
   }
 }
 
-// Monitoramento automático (GitHub Actions 2x/dia ou PC local). Cabe no orçamento de minutos da rodada:
+// Monitoramento automático (GitHub Actions 4x/dia ou PC local). Cabe no orçamento de minutos da rodada:
 // fila → recontagem → 1 nicho × 1 país → sites dos maiores anunciantes → 1 gateway → enriquecimento.
 async function rotina(ctx, o) {
   const config = await lerConfig();
