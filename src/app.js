@@ -134,7 +134,21 @@ async function atender(req, res) {
     if (rota === '/api/painel') return json(res, await painelGeral(pais));
     if (rota === '/api/paginas') return json(res, await rankingPaginas({ pais,
       nicho: q.nicho || '', min: Number(q.min || 0), busca: q.busca || '', minDias: Number(q.dias || 0), gateway: q.gateway || '',
+      tipo: q.tipo ?? 'low', precoMax: Number(q.precoMax || 0), semPreco: q.semPreco !== '0', idioma: q.idioma || '',
     }));
+    if (rota === '/api/ofertas-agrupadas') {
+      // Oferta = checkout (ou site): várias páginas no mesmo checkout aparecem juntas.
+      const f = ['pais = ?'], p = [pais];
+      if (q.tipo ?? 'low') { f.push("COALESCE(tipo, 'indefinido') = ?"); p.push(q.tipo ?? 'low'); }
+      if (Number(q.precoMax)) { f.push(q.semPreco !== '0' ? '(preco_brl IS NULL OR preco_brl <= ?)' : 'preco_brl <= ?'); p.push(Number(q.precoMax)); }
+      if (q.idioma) { f.push('(idioma IS NULL OR idioma = ?)'); p.push(q.idioma); }
+      if (q.gateway) { f.push('gateway = ?'); p.push(q.gateway); }
+      const lista = await all(`SELECT * FROM ofertas WHERE ${f.join(' AND ')} ORDER BY ativos_paginas DESC, anuncios DESC LIMIT 300`, p);
+      const membros = lista.length ? await all(`SELECT m.oferta_id, m.page_id, p.nome FROM oferta_membros m JOIN paginas p ON p.page_id = m.page_id
+        WHERE m.oferta_id IN (${lista.map(() => '?').join(', ')})`, lista.map((o) => o.id)) : [];
+      for (const o of lista) { o.dominios = JSON.parse(o.dominios || '[]'); o.membros = membros.filter((m) => m.oferta_id === o.id); }
+      return json(res, lista);
+    }
     if (rota === '/api/ofertas') return json(res, await rankingDominios({ pais, nicho: q.nicho || '' }));
     if (rota.startsWith('/api/pagina/')) return json(res, await detalhePagina(decodeURIComponent(rota.split('/').pop()), pais));
     if (rota === '/api/gateways') return json(res, await resumoGateways(pais));

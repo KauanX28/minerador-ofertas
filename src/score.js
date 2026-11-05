@@ -3,6 +3,7 @@
 import { all, get, hoje } from './db.js';
 import { GATEWAYS } from './util.js';
 import { uid } from './contexto.js';
+import { precoDosTextos } from './classificador.js';
 
 const DIA = 86400;
 const clamp = (x) => Math.max(0, Math.min(1, x));
@@ -47,18 +48,34 @@ export async function paisesComDados() {
 }
 
 // Carrega tudo de uma vez (poucas consultas) e calcula em memória.
-export async function rankingPaginas({ pais = 'BR', nicho = '', min = 0, busca = '', minDias = 0, gateway = '' } = {}) {
+// Filtros da Fase 1: tipo de oferta (padrão: só low ticket), preço máximo em reais, idioma e anunciantes bloqueados.
+export async function rankingPaginas({ pais = 'BR', nicho = '', min = 0, busca = '', minDias = 0, gateway = '', tipo = '', precoMax = 0, semPreco = true, idioma = '' } = {}) {
   const agora = Date.now() / 1000;
-  const [paginas, ult, ant, ads, analises, favs] = await Promise.all([
+  const [paginas, ult, ant, ads, analises, favs, hist30, cks, mesmoCriativo, mesmoTexto] = await Promise.all([
     all('SELECT * FROM paginas'),
     all(SQL_ULTIMO, ['9999-12-31', pais, pais]),
     all(SQL_ULTIMO, [diasAtras(5), pais, pais]),
-    all(`SELECT page_id, inicio, dup, dominio, gateway, CASE WHEN thumb_arquivo IS NOT NULL THEN '/api/midia/' || ad_id ELSE thumb END AS thumb, titulo, SUBSTR(texto, 1, 220) texto, formato
+    all(`SELECT page_id, inicio, dup, dominio, gateway, checkout, phash, texto_hash, CASE WHEN thumb_arquivo IS NOT NULL THEN '/api/midia/' || ad_id ELSE thumb END AS thumb, titulo, SUBSTR(texto, 1, 220) texto, formato
          FROM anuncios WHERE ativo = 1 AND pais = ? ORDER BY dup DESC, inicio ASC`, [pais]),
     mapaAnalises(),
     favoritosSet('pagina'),
+    all('SELECT page_id, data, ativos FROM historico_diario WHERE pais = ? AND data >= ? ORDER BY data', [pais, diasAtras(31)]),
+    all('SELECT checkout, preco_brl, produto, preco FROM checkouts'),
+    all(`SELECT phash, COUNT(DISTINCT page_id) n FROM anuncios WHERE ativo = 1 AND pais = ? AND phash IS NOT NULL GROUP BY phash HAVING COUNT(DISTINCT page_id) > 1`, [pais]),
+    all(`SELECT texto_hash, COUNT(DISTINCT page_id) n FROM anuncios WHERE ativo = 1 AND pais = ? AND texto_hash IS NOT NULL AND texto_hash <> 'x' GROUP BY texto_hash HAVING COUNT(DISTINCT page_id) > 1`, [pais]),
   ]);
   const ultimo = new Map(ult.map((r) => [r.page_id, r]));
+  const serie = new Map();
+  for (const h of hist30) { if (!serie.has(h.page_id)) serie.set(h.page_id, []); serie.get(h.page_id).push(h); }
+  const ckMap = new Map(cks.map((c) => [c.checkout, c]));
+  const phashContas = new Map(mesmoCriativo.map((r) => [r.phash, r.n]));
+  const textoContas = new Map(mesmoTexto.map((r) => [r.texto_hash, r.n]));
+  // Variação: contagem de hoje menos a contagem mais recente com pelo menos N dias.
+  const variacao = (pid, atual, n) => {
+    const corte = diasAtras(n);
+    const ant = (serie.get(pid) || []).filter((h) => h.data <= corte).at(-1);
+    return ant ? atual - ant.ativos : null;
+  };
   const anterior = new Map(ant.map((r) => [r.page_id, r]));
   const adsPorPagina = new Map();
   for (const a of ads) { if (!adsPorPagina.has(a.page_id)) adsPorPagina.set(a.page_id, []); adsPorPagina.get(a.page_id).push(a); }
@@ -69,6 +86,8 @@ export async function rankingPaginas({ pais = 'BR', nicho = '', min = 0, busca =
     const nichos = JSON.parse(p.nichos || '[]');
     if (nicho && !nichos.includes(nicho)) continue;
     if (busca && !String(p.nome).toLowerCase().includes(busca.toLowerCase())) continue;
+    if (tipo && (p.tipo || 'indefinido') !== tipo) continue;
+    if (idioma && p.idioma && p.idioma !== idioma) continue;
     const lista = adsPorPagina.get(p.page_id) || [];
     const h = ultimo.get(p.page_id);
     const ativos = h ? h.ativos : lista.length;
@@ -86,17 +105,25 @@ export async function rankingPaginas({ pais = 'BR', nicho = '', min = 0, busca =
       if (a.gateway) gws.add(a.gateway);
     }
     const listaDom = Object.entries(dominios).sort((a, b) => b[1] - a[1]).map(([d]) => d).slice(0, 3);
-    let preco = null, produto = null, formatoFunil = null;
+    let preco = null, produto = null, formatoFunil = null, precoBrl = null;
+    for (const a of lista) {
+      const c = a.checkout && ckMap.get(a.checkout);
+      if (c && precoBrl == null && c.preco_brl != null) { precoBrl = c.preco_brl; preco = c.preco; produto = c.produto; }
+    }
     for (const d of listaDom) {
       const x = analises.get(d.split('/')[0]);
       if (!x) continue;
-      (x.checkouts || []).forEach((c) => gws.add(c.gateway));
+      (x.checkouts || []).forEach((c) => { gws.add(c.gateway); const k = ckMap.get(c.checkout); if (precoBrl == null && k?.preco_brl != null) { precoBrl = k.preco_brl; preco = k.preco; produto = k.produto; } });
       preco ||= x.checkouts?.[0]?.preco || x.precos?.[0] || null;
       produto ||= x.checkouts?.[0]?.produto || null;
       formatoFunil ||= x.tecnologia?.quiz?.length ? 'Quiz' : x.tecnologia?.vsl?.length ? 'VSL' : 'Página';
     }
     if (!formatoFunil && lista.some((a) => a.gateway)) formatoFunil = 'Direto p/ checkout';
     if (gateway && !gws.has(gateway)) continue;
+    let precoOrigem = precoBrl != null ? 'checkout' : null;
+    if (precoBrl == null) { precoBrl = precoDosTextos(lista.map((a) => a.texto)); if (precoBrl != null) { precoOrigem = 'anúncio'; preco = 'R$ ' + precoBrl.toFixed(2).replace('.', ','); } }
+    if (precoMax && (precoBrl == null ? !semPreco : precoBrl > precoMax)) continue;
+    const contasMesmoCriativo = lista.reduce((m, a) => Math.max(m, (a.phash && phashContas.get(a.phash)) || 1, (a.texto_hash && textoContas.get(a.texto_hash)) || 1), 1);
     const top = lista[0] || {};
     const m = { ativos, dias, dupMax, crescimentoPct };
     if (!h && !lista.length) continue;
@@ -105,7 +132,9 @@ export async function rankingPaginas({ pais = 'BR', nicho = '', min = 0, busca =
       categorias: p.categorias, nichos, palavras: JSON.parse(p.palavras || '[]'),
       ativos, ativosConfirmado: !!h, dataContagem: h?.data || null,
       crescimento, crescimentoPct, dias, dupMax, criativosNoBanco: lista.length,
-      dominios: listaDom, gateways: [...gws].map(nomeGateway), preco, produto, funil: formatoFunil,
+      dominios: listaDom, gateways: [...gws].map(nomeGateway), preco, precoBrl, precoOrigem, produto, funil: formatoFunil,
+      tipo: p.tipo || 'indefinido', tipoMotivo: p.tipo_motivo || '', idioma: p.idioma || null, contasMesmoCriativo,
+      var7: variacao(p.page_id, ativos, 7), var14: variacao(p.page_id, ativos, 14), var30: variacao(p.page_id, ativos, 30),
       thumb: top.thumb || null, titulo: top.titulo || '', texto: top.texto || '',
       favorito: favs.has(p.page_id),
       score: pontuar(m), status: classificar({ ...m, crescimentoPct: crescimentoPct ?? 0 }),

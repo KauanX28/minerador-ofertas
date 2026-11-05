@@ -94,4 +94,28 @@ export const MIGRACOES = [
       await rls(ctx, ['historico_diario', 'tarefas', 'favoritos', 'coletas', 'execucoes', 'prefs', 'uso_diario']);
     },
   },
+  {
+    versao: 3,
+    nome: 'fase 1: tipo de oferta, idioma, preço em reais, hash de criativo, ofertas por checkout, câmbio',
+    up: async (ctx) => {
+      const { pg, ddl, colunas } = ctx;
+      const add = async (tabela, defs) => {
+        const cs = await colunas(tabela);
+        for (const [c, t] of defs) if (!cs.includes(c)) await ddl(`ALTER TABLE ${tabela} ADD COLUMN ${c} ${t}`);
+      };
+      await add('anuncios', [['idioma', 'TEXT'], ['phash', 'TEXT'], ['texto_hash', 'TEXT'], ['link_final', 'TEXT']]);
+      await add('paginas', [['tipo', 'TEXT'], ['tipo_motivo', 'TEXT'], ['idioma', 'TEXT'], ['classificado', 'BIGINT']]);
+      await add('checkouts', [['preco_valor', 'REAL'], ['moeda', 'TEXT'], ['preco_brl', 'REAL']]);
+      await ddl(`CREATE INDEX IF NOT EXISTS ix_anuncios_phash ON anuncios(phash);
+        CREATE INDEX IF NOT EXISTS ix_anuncios_texto_hash ON anuncios(texto_hash);
+        CREATE TABLE IF NOT EXISTS cambio (moeda TEXT NOT NULL, data TEXT NOT NULL, brl REAL, PRIMARY KEY (moeda, data));
+        CREATE TABLE IF NOT EXISTS ofertas (
+          id ${id(pg)}, chave TEXT UNIQUE NOT NULL, tipo_chave TEXT, pais TEXT, gateway TEXT, produto TEXT, preco TEXT, preco_brl REAL,
+          tipo TEXT, idioma TEXT, paginas INTEGER, dominios TEXT DEFAULT '[]', anuncios INTEGER, ativos_paginas INTEGER,
+          inicio BIGINT, thumb TEXT, atualizado BIGINT);
+        CREATE INDEX IF NOT EXISTS ix_ofertas_pais ON ofertas(pais, tipo);
+        CREATE TABLE IF NOT EXISTS oferta_membros (oferta_id BIGINT NOT NULL, page_id TEXT NOT NULL, dominio TEXT, PRIMARY KEY (oferta_id, page_id));`);
+      await rls(ctx, ['cambio', 'ofertas', 'oferta_membros']);
+    },
+  },
 ];

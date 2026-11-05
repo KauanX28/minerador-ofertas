@@ -18,6 +18,21 @@ import { fechar, usaPostgres } from './banco.js';
 import { alertar } from './alerta.js';
 import { processarMiniaturas, limparMiniaturas } from './midia.js';
 import { usoELimites } from './uso.js';
+import { enriquecerTudo } from './enriquecer.js';
+import { idiomaDoPais } from './classificador.js';
+
+// Palavras do nicho no idioma do país (config antiga com lista simples = português).
+function palavrasDoNicho(config, nicho, pais) {
+  const v = config.nichos[nicho];
+  if (!v) return null;
+  if (Array.isArray(v)) return v;
+  const lang = idiomaDoPais(pais);
+  return v[lang] || v.pt || Object.values(v)[0] || [];
+}
+
+// Orçamento de tempo da rodada (minutos do GitHub Actions): cada etapa confere antes de começar.
+let PRAZO = Infinity;
+const temTempo = (minutos = 2) => Date.now() + minutos * 60000 < PRAZO;
 import { rankingPaginas } from './score.js';
 import { analisarPagina, lerCheckout } from './analisador.js';
 import { gatewayPorTexto, hostDe, detectarGateway, raizDominio, GATEWAYS } from './util.js';
@@ -57,6 +72,8 @@ async function analisarDominio(ctx, o, url, { aprofundar = 5, max = 80 } = {}) {
   const r = await analisarPagina(ctx, url);
   if (!r.ok) log(`  não abriu: ${r.erro || r.status}`);
   const dominio = r.dominio || hostDe(url);
+  r.cloaker = await checarCloaker(url, r).catch(() => null);
+  if (r.cloaker?.suspeito) log(`  possível cloaker: ${r.cloaker.motivo}`);
   if (r.checkouts?.length) {
     const c = r.checkouts[0];
     const info = await lerCheckout(ctx, c.url);
@@ -88,6 +105,39 @@ async function analisarDominio(ctx, o, url, { aprofundar = 5, max = 80 } = {}) {
   return dados;
 }
 
+// Cloaker: a mesma URL aberta como robô de anúncio (facebookexternalhit) mostra outra página?
+async function checarCloaker(url, vistaCelular) {
+  if (!vistaCelular?.ok) return null;
+  const alvo = /^https?:\/\//.test(url) ? url : 'https://' + url;
+  const r = await fetch(alvo, { headers: { 'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)' }, redirect: 'follow', signal: AbortSignal.timeout(15000) });
+  const html = await r.text();
+  const hostRobo = hostDe(r.url);
+  const titulo = (html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] || '').trim();
+  const palavras = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length;
+  const motivos = [];
+  if (hostRobo && vistaCelular.dominio && hostRobo !== vistaCelular.dominio) motivos.push(`robô vai para ${hostRobo}, celular vai para ${vistaCelular.dominio}`);
+  if (titulo && vistaCelular.titulo && titulo !== vistaCelular.titulo && !vistaCelular.titulo.includes(titulo) && !titulo.includes(vistaCelular.titulo)) motivos.push(`títulos diferentes ("${titulo.slice(0, 40)}")`);
+  if (vistaCelular.palavras > 300 && palavras < vistaCelular.palavras * 0.2) motivos.push('página do robô quase vazia');
+  return { suspeito: motivos.length > 0, motivo: motivos.join('; '), hostRobo, tituloRobo: titulo.slice(0, 120) };
+}
+
+// Enriquecimento: todo anunciante com N+ anúncios ativos tem o site analisado (gateway, preço, funil, cloaker).
+async function enriquecerDominios(ctx, o, { limite = 6, minAnuncios = 8 } = {}) {
+  const dias14 = agora() - 14 * 86400;
+  const candidatos = await all(`SELECT a.dominio, COUNT(*) n FROM anuncios a
+    JOIN (SELECT page_id, MAX(ativos) m FROM historico_diario WHERE pais = ? GROUP BY page_id) h ON h.page_id = a.page_id
+    WHERE a.ativo = 1 AND a.pais = ? AND a.dominio IS NOT NULL AND h.m >= ? GROUP BY a.dominio ORDER BY COUNT(*) DESC LIMIT 60`, [o.pais, o.pais, minAnuncios]);
+  const feitos = new Set((await all('SELECT dominio FROM analises WHERE quando > ?', [dias14])).map((r) => r.dominio));
+  const fila = candidatos.map((c) => c.dominio.split('/')[0]).filter((d, i, arr) => arr.indexOf(d) === i && !feitos.has(d) && !feitos.has(raizDominio(d)) && !detectarGateway('https://' + d + '/x'));
+  const vez = fila.slice(0, limite);
+  if (vez.length) log(`> Analisando ${vez.length} sites de anunciantes com ${minAnuncios}+ anúncios (de ${fila.length} pendentes)`);
+  for (const d of vez) {
+    if (!temTempo(3)) { log('  (tempo da rodada esgotado, o resto fica para a próxima)'); break; }
+    await analisarDominio(ctx, o, d, { aprofundar: 0, max: 30 }).catch((e) => log(`  ${d}: ${e.message}`));
+    await pausa();
+  }
+}
+
 // ---------- tarefas ----------
 
 // Vários países (--pais "BR,MX"): cada um é minerado separado, para não misturar mercados.
@@ -102,7 +152,7 @@ async function minerar(ctx, o) {
     const nichos = typeof o.nicho === 'string' ? [o.nicho] : Object.keys(config.nichos);
     for (const n of nichos) {
       if (!config.nichos[n]) throw new Error(`Nicho "${n}" não existe na configuração`);
-      tarefas.push({ nicho: n, palavras: config.nichos[n] });
+      tarefas.push({ nicho: n, palavras: palavrasDoNicho(config, n, o.pais) });
     }
   }
   const max = Number(o.max || config.maxAnunciosPorPalavra || 150);
@@ -112,6 +162,7 @@ async function minerar(ctx, o) {
     log(`\n=== Nicho: ${nicho} (${o.pais}) ===`);
     const contagem = new Map();
     for (const palavra of palavras) {
+      if (!temTempo(4)) { log('  (tempo da rodada esgotado)'); break; }
       log(`> Buscando "${palavra}"...`);
       const r = await buscarPalavra(ctx, palavra, { pais: o.pais, maxAnuncios: max, log });
       await salvarAnuncios(r.anuncios, { nicho, palavra, pais: o.pais });
@@ -200,7 +251,19 @@ async function analisar(ctx, o) {
 // Reconta cada página no(s) país(es) em que ela é acompanhada.
 async function atualizar(ctx, o) {
   const lim = Number(o.limite || 150);
-  const pares = await all(`SELECT page_id, pais FROM historico_diario GROUP BY page_id, pais ORDER BY MAX(ativos) DESC LIMIT ?`, [lim]);
+  const topNicho = Number(o.topNicho || 15);
+  const hoje = new Date().toISOString().slice(0, 10);
+  // Última contagem e maior número de anúncios de cada página/país; quem já foi contado hoje fica para depois.
+  const contagens = await all(`SELECT h.page_id, h.pais, MAX(h.data) ultima, MAX(h.ativos) maximo, p.nichos FROM historico_diario h
+    JOIN paginas p ON p.page_id = h.page_id GROUP BY h.page_id, h.pais, p.nichos`);
+  const porNicho = new Map();
+  for (const c of contagens) for (const n of JSON.parse(c.nichos || '[]')) {
+    const k = n + '|' + c.pais; if (!porNicho.has(k)) porNicho.set(k, []); porNicho.get(k).push(c);
+  }
+  const escolhidos = new Map();
+  for (const lista of porNicho.values()) for (const c of lista.sort((a, b) => b.maximo - a.maximo).slice(0, topNicho)) escolhidos.set(c.page_id + '|' + c.pais, c);
+  for (const c of contagens.sort((a, b) => b.maximo - a.maximo).slice(0, 30)) escolhidos.set(c.page_id + '|' + c.pais, c);
+  const pares = [...escolhidos.values()].filter((c) => c.ultima < hoje).sort((a, b) => a.ultima.localeCompare(b.ultima)).slice(0, lim);
   const chave = new Set(pares.map((p) => p.page_id + '|' + p.pais));
   for (const f of await all("SELECT f.chave, p.paises FROM favoritos f LEFT JOIN paginas p ON p.page_id = f.chave WHERE f.tipo = 'pagina'")) {
     for (const pais of JSON.parse(f.paises || '["BR"]')) if (!chave.has(f.chave + '|' + pais)) { pares.unshift({ page_id: f.chave, pais }); chave.add(f.chave + '|' + pais); }
@@ -208,8 +271,10 @@ async function atualizar(ctx, o) {
   const porPais = new Map();
   for (const p of pares) { if (!porPais.has(p.pais)) porPais.set(p.pais, []); porPais.get(p.pais).push(p.page_id); }
   for (const [pais, ids] of porPais) {
-    log(`> Atualizando contagem de ${ids.length} páginas acompanhadas em ${pais}...`);
-    await aprofundarPaginas(ctx, { ...o, pais }, ids);
+    log(`> Recontando ${ids.length} anunciantes (acompanhados e top de cada nicho) em ${pais}...`);
+    const cabe = [];
+    for (const id of ids) { cabe.push(id); }
+    await aprofundarPaginas(ctx, { ...o, pais }, cabe);
   }
 }
 
@@ -248,31 +313,33 @@ async function processarFila(ctx, o) {
   }
 }
 
-// Monitoramento automático (rodado de horas em horas pelo GitHub Actions ou pelo agendador do Windows).
+// Monitoramento automático (GitHub Actions 2x/dia ou PC local). Cabe no orçamento de minutos da rodada:
+// fila → recontagem → 1 nicho × 1 país → sites dos maiores anunciantes → 1 gateway → enriquecimento.
 async function rotina(ctx, o) {
   const config = await lerConfig();
   const r = config.rotina || {};
+  PRAZO = Date.now() + Number(r.minutosPorRodada || 25) * 60000;
   await processarFila(ctx, o);
   const idx = Number((await get("SELECT valor FROM ajustes WHERE chave = 'rotina_indice'"))?.valor || 0);
   const salvarIdx = () => run("INSERT INTO ajustes (chave, valor) VALUES ('rotina_indice', ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor", [String(idx + 1)]);
-  if (r.atualizar !== false) await atualizar(ctx, { ...o, limite: r.paginasParaAtualizar || 80 });
-  await processarFila(ctx, o);
-  const nichos = (r.nichos?.length ? r.nichos : Object.keys(config.nichos)).filter((n) => config.nichos[n]);
-  // Rodízio: cada rodada pega um nicho e um país diferentes (países nunca são misturados).
   const paises = r.paises?.length ? r.paises : [config.pais || 'BR'];
-  if (nichos.length) {
+  const nichos = (r.nichos?.length ? r.nichos : Object.keys(config.nichos)).filter((n) => config.nichos[n]);
+  const pais = paises[idx % paises.length];
+
+  if (r.atualizar !== false && temTempo(8)) await atualizar(ctx, { ...o, pais, limite: r.paginasParaAtualizar || 35, topNicho: r.topPorNicho || 15 });
+  await processarFila(ctx, o);
+  if (nichos.length && temTempo(8)) {
     const n = nichos[idx % nichos.length];
-    const pais = paises[Math.floor(idx / nichos.length) % paises.length];
     log(`\n>>> Rotina: minerando nicho "${n}" em ${pais}`);
-    await minerar(ctx, { ...o, nicho: n, pais });
+    await minerar(ctx, { ...o, nicho: n, pais, top: 10, sites: 0 });
   }
+  if (temTempo(6)) await enriquecerDominios(ctx, { ...o, pais }, { limite: config.sitesParaAnalisar ?? 6, minAnuncios: config.minAnunciosParaAnalisar ?? 8 });
   await processarFila(ctx, o);
   const gws = r.gateways || GATEWAYS.filter((g) => g.regiao === 'BR').map((g) => g.id);
-  if (gws.length) {
+  if (gws.length && temTempo(6)) {
     const g = gws[idx % gws.length];
-    const pais = paises[idx % paises.length];
     log(`\n>>> Rotina: gateway ${g} em ${pais}`);
-    await gateway(ctx, { ...o, gateway: g, pais, max: r.maxPorGateway || 200 });
+    await gateway(ctx, { ...o, gateway: g, pais, max: r.maxPorGateway || 120, checkouts: 12, paginas: 6 });
   }
   await salvarIdx();
   await processarFila(ctx, o);
@@ -296,8 +363,11 @@ async function manutencao(ctx, o) {
   if (errosHoje >= 5) await alertar(`${errosHoje} coletas com erro nas últimas 24 h. Último: ${uso.raspador.ultimoErro?.erro || '?'}`, { log });
 }
 
-const TAREFAS = { minerar, gateway, analisar, atualizar, rotina, manutencao, fila: processarFila };
-const SEM_NAVEGADOR = new Set(['manutencao']);
+async function enriquecer() { await processarMiniaturas({ limite: 300, log }); await enriquecerTudo({ log }); }
+async function sites(ctx, o) { await enriquecerDominios(ctx, o, { limite: Number(o.limite || 10), minAnuncios: Number(o.min || 8) }); }
+
+const TAREFAS = { minerar, gateway, analisar, atualizar, rotina, manutencao, enriquecer, sites, fila: processarFila };
+const SEM_NAVEGADOR = new Set(['manutencao', 'enriquecer']);
 const ORIGEM = process.env.GITHUB_ACTIONS ? 'actions' : 'local';
 
 const o = lerArgs(process.argv.slice(2));
@@ -318,7 +388,11 @@ const inicio = Date.now();
 let codigo = 0, falha = null;
 try {
   await TAREFAS[tipo](navegador?.ctx, o);
-  if (navegador && ['rotina', 'minerar', 'gateway', 'fila'].includes(tipo)) await processarMiniaturas({ log });
+  if (navegador && ['rotina', 'minerar', 'gateway', 'fila', 'analisar', 'atualizar'].includes(tipo)) {
+    await processarMiniaturas({ limite: 200, log });
+    log('> Enriquecimento (preço em reais, idioma, tipo de oferta, ofertas por checkout)');
+    await enriquecerTudo({ log });
+  }
 } catch (e) {
   codigo = 1; falha = e;
   log(e instanceof BloqueioError ? `\n!! ${e.message}` : `\n!! Erro: ${e.stack || e.message}`);

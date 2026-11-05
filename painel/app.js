@@ -320,6 +320,14 @@ async function abrirDominio(entrada) {
 
 // ---------- telas ----------
 const TELAS = {};
+const TIPOS_OFERTA = { low: 'Low ticket (infoproduto)', info_alto: 'Infoproduto médio/alto', app: 'App / assinatura', fisico: 'Produto físico',
+  lancamento: 'Lançamento / evento', local: 'Negócio local', marca: 'Marca grande', indefinido: 'Ainda sem classificação' };
+const brl = (v) => 'R$ ' + Number(v).toFixed(2).replace('.', ',');
+const celPreco = (preco, precoBrl, origem) => {
+  if (!preco && precoBrl == null) return '<span class="mut">—</span>';
+  const conv = precoBrl != null && preco && !/^R\$/.test(preco) ? `<br><span class="mut peq">≈ ${brl(precoBrl)}</span>` : '';
+  return `<span class="preco" title="${origem ? 'Preço lido no ' + esc(origem) : ''}">${esc(preco || brl(precoBrl))}</span>${conv}`;
+};
 
 const colsAnunciantes = (comNicho) => [
   ['#', (p, i) => `<span class="mut num">${i + 1}</span>`],
@@ -330,7 +338,7 @@ const colsAnunciantes = (comNicho) => [
   ['Dias', (p) => `<span class="num">${p.dias}</span>`, 'dias', 'dir'],
   ['Variações', (p) => `<span class="num">${p.dupMax}x</span>`, 'dupMax', 'dir'],
   ['Gateway', (p) => tagsGw(p.gateways) || '<span class="mut">—</span>'],
-  ['Preço', (p) => (p.preco ? `<span class="preco">${esc(p.preco)}</span>` : '<span class="mut">—</span>')],
+  ['Preço', (p) => celPreco(p.preco, p.precoBrl, p.precoOrigem), 'precoBrl'],
   ['Funil', (p) => esc(p.funil || '—')],
 
   ['Score', (p) => barraScore(p.score), 'score'],
@@ -368,16 +376,21 @@ TELAS.inicio = async (el) => {
   </div>` : `<div class="painel-box vazio secao">Nenhum dado de ${esc(nomePais(PAIS))} ainda. <a href="#/minerar">Comece uma mineração</a> ou pesquise um gateway na barra de busca.</div>`}`;
 };
 
-let filtrosOfertas = { aba: 'paginas', nicho: '', status: '', min: '', dias: '', busca: '', gateway: '', funil: '' };
+let filtrosOfertas = { aba: 'paginas', nicho: '', status: '', min: '', dias: '', busca: '', gateway: '', funil: '', tipo: 'low', precoMax: null, semPreco: true, idioma: '' };
 const ordOfertas = { k: 'score', asc: false };
 TELAS.ofertas = async (el) => {
   const f = filtrosOfertas;
+  if (f.precoMax == null) f.precoMax = String(CONFIG.precoMaxFiltro ?? 47);
   el.innerHTML = `
   <div class="cab"><div><h1>Ofertas escaladas</h1><p>${esc(nomePais(PAIS))} · ranking por anúncios ativos, tempo rodando, variações de criativo e crescimento</p></div>
-    <div class="seg"><button data-a="paginas">Por anunciante</button><button data-a="ofertas">Por site / funil</button></div></div>
+    <div class="seg"><button data-a="paginas">Por anunciante</button><button data-a="agrupadas">Por checkout</button><button data-a="ofertas">Por site / funil</button></div></div>
   <div class="com-filtros">
     <aside class="filtros"><h3>Filtros</h3>
-      <label class="campo">Buscar<input id="fBusca" placeholder="nome ou site"></label>
+      <label class="campo">Tipo de oferta<select id="fTipo"><option value="">Todos os tipos</option>${Object.entries(TIPOS_OFERTA).map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select></label>
+      <label class="campo">Preço até<select id="fPreco"><option value="27">R$ 27</option><option value="47">R$ 47</option><option value="97">R$ 97</option><option value="197">R$ 197</option><option value="0">Qualquer preço</option></select></label>
+      <label class="peq mut" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="fSemPreco"> incluir quem ainda não tem preço lido</label>
+      <label class="campo">Idioma dos anúncios<select id="fIdioma"><option value="">Qualquer</option><option value="pt">Português</option><option value="es">Espanhol</option><option value="en">Inglês</option><option value="fr">Francês</option><option value="it">Italiano</option><option value="de">Alemão</option></select></label>
+      <label class="campo">Buscar<input id="fBusca" placeholder="nome, produto ou site"></label>
       <label class="campo">Nicho<select id="fNicho"><option value="">Todos</option>${Object.keys(CONFIG.nichos).map((n) => `<option>${esc(n)}</option>`).join('')}<option>Avulso</option></select></label>
       <label class="campo">Status<select id="fStatus"><option value="">Todos</option>${Object.keys(STATUS).map((s) => `<option>${s}</option>`).join('')}</select></label>
       <label class="campo">Gateway<select id="fGateway"><option value="">Qualquer</option>${CONFIG.gateways.map((g) => `<option value="${g.id}">${g.nome}</option>`).join('')}</select></label>
@@ -390,13 +403,33 @@ TELAS.ofertas = async (el) => {
       <div class="painel-box rolar" id="lista"></div></section>
   </div>`;
   $$('.seg button', el).forEach((b) => { b.classList.toggle('ativo', b.dataset.a === f.aba); b.onclick = () => { f.aba = b.dataset.a; TELAS.ofertas(el); }; });
-  const campos = { fNicho: 'nicho', fStatus: 'status', fGateway: 'gateway', fFunil: 'funil', fMin: 'min', fDias: 'dias', fBusca: 'busca' };
+  const campos = { fTipo: 'tipo', fPreco: 'precoMax', fIdioma: 'idioma', fNicho: 'nicho', fStatus: 'status', fGateway: 'gateway', fFunil: 'funil', fMin: 'min', fDias: 'dias', fBusca: 'busca' };
   let t;
   for (const [id, k] of Object.entries(campos)) { $('#' + id).value = f[k]; $('#' + id).oninput = () => { f[k] = $('#' + id).value; clearTimeout(t); t = setTimeout(carregar, 250); }; }
-  $('#fLimpar').onclick = () => { Object.keys(campos).forEach((id) => (f[campos[id]] = '')); TELAS.ofertas(el); };
+  $('#fSemPreco').checked = f.semPreco; $('#fSemPreco').onchange = () => { f.semPreco = $('#fSemPreco').checked; carregar(); };
+  // Os filtros que não se aplicam à aba ficam escondidos para não confundir.
+  const soAnunciante = ['fNicho', 'fStatus', 'fFunil'];
+  if (f.aba === 'agrupadas') soAnunciante.forEach((id) => ($('#' + id).closest('label').style.display = 'none'));
+  if (f.aba === 'ofertas') ['fTipo', 'fPreco', 'fSemPreco', 'fIdioma'].forEach((id) => ($('#' + id).closest('label').style.display = 'none'));
+  $('#fLimpar').onclick = () => {
+    Object.keys(campos).forEach((id) => (f[campos[id]] = ''));
+    Object.assign(f, { tipo: 'low', precoMax: String(CONFIG.precoMaxFiltro ?? 47), semPreco: true });
+    TELAS.ofertas(el);
+  };
   let itens = [], seq = 0;
   const desenhar = () => {
-    const cols = f.aba === 'paginas' ? colsAnunciantes(!f.nicho) : [
+    const colsCheckout = [
+      ['#', (o, i) => `<span class="mut num">${i + 1}</span>`],
+      ['Oferta', (o) => `<a href="#" onclick='${o.dominios[0] ? `abrirDominio(${js(o.dominios[0].split('/')[0])})` : `abrirPagina(${js(o.membros[0]?.page_id || '')})`};return false' style="color:inherit;text-decoration:none">${entidade(o.thumb, o.produto || o.dominios[0] || o.chave.slice(4), o.tipo_chave === 'ck' ? 'mesmo checkout' : o.tipo_chave === 'dom' ? 'mesmo site' : 'página única')}</a>`, 'nome'],
+      ['Anúncios ativos', (o) => `<b class="num">${fmt(o.ativos)}</b>`, 'ativos', 'dir'],
+      ['Páginas', (o) => `<span class="num" title="${esc(o.membros.map((m) => m.nome).join(', '))}">${o.membros.length || o.paginas}</span>`, 'npags', 'dir', (o) => o.membros.length || o.paginas],
+      ['Dias', (o) => `<span class="num">${o.dias}</span>`, 'dias', 'dir'],
+      ['Gateway', (o) => tagsGw(o.gateways) || '<span class="mut">—</span>'],
+      ['Preço', (o) => celPreco(o.preco, o.preco_brl), 'preco_brl'],
+      ['Tipo', (o) => `<span class="peq">${esc(TIPOS_OFERTA[o.tipo] || '—')}</span>`],
+      ['', (o) => o.dominios[0] ? `${btEstrela('oferta', o.dominios[0], o.produto || o.dominios[0], false)}<a class="bt-ic" href="https://${esc(o.dominios[0])}" target="_blank" title="Abrir site">${ic('externo')}</a>` : '', null, 'acoes'],
+    ];
+    const cols = f.aba === 'paginas' ? colsAnunciantes(!f.nicho) : f.aba === 'agrupadas' ? colsCheckout : [
       ['#', (o, i) => `<span class="mut num">${i + 1}</span>`],
       ['Site / funil', (o) => `<a href="#" onclick='abrirDominio(${js(o.dominio.split('/')[0])});return false' style="color:inherit;text-decoration:none">${entidade(o.thumb, o.dominio, o.produto || o.titulo || '')}</a>`, 'dominio'],
       ['Status', (o) => tagStatus(o.status), 'status'],
@@ -413,18 +446,28 @@ TELAS.ofertas = async (el) => {
   };
   async function carregar() {
     const minha = ++seq;
-    const qs = new URLSearchParams({ nicho: f.nicho, min: f.min || 0, dias: f.dias || 0, busca: f.busca, gateway: f.gateway });
-    let r = await api(`/api/${f.aba}?${qs}`);
+    const qs = new URLSearchParams({ nicho: f.nicho, min: f.min || 0, dias: f.dias || 0, busca: f.busca, gateway: f.gateway,
+      tipo: f.tipo, precoMax: f.precoMax || 0, semPreco: f.semPreco ? 1 : 0, idioma: f.idioma });
+    let r = await api(`/api/${f.aba === 'agrupadas' ? 'ofertas-agrupadas' : f.aba}?${qs}`);
     if (minha !== seq) return;
     const g = CONFIG.gateways.find((x) => x.id === f.gateway)?.nome;
+    if (f.aba === 'agrupadas') {
+      const hoje = Date.now() / 1000;
+      r = r.map((o) => ({ ...o, ativos: o.ativos_paginas, dias: o.inicio ? Math.max(0, Math.floor((hoje - o.inicio) / 86400)) : 0, nome: o.produto || o.dominios[0] || '',
+        gateways: o.gateway ? [CONFIG.gateways.find((x) => x.id === o.gateway)?.nome || o.gateway] : [] }));
+    }
     r = r.filter((x) => (!f.status || x.status === f.status) && (!f.min || x.ativos >= Number(f.min)) && (!f.dias || x.dias >= Number(f.dias)) &&
       (!f.funil || x.funil === f.funil) && (!g || (x.gateways || []).includes(g)) &&
-      (!f.busca || (x.nome || x.dominio || '').toLowerCase().includes(f.busca.toLowerCase())));
+      (!f.busca || [x.nome, x.dominio, x.produto, ...(x.dominios || [])].join(' ').toLowerCase().includes(f.busca.toLowerCase())));
     itens = r;
-    $('#fTotal').textContent = `${fmt(r.length)} ${f.aba === 'paginas' ? 'anunciantes' : 'sites'}`;
+    $('#fTotal').textContent = `${fmt(r.length)} ${f.aba === 'paginas' ? 'anunciantes' : f.aba === 'agrupadas' ? 'ofertas (páginas no mesmo checkout contam juntas)' : 'sites'}` +
+      (r.length || !f.tipo ? '' : ' · tente "Todos os tipos" ou um preço maior');
     desenhar();
   }
   $('#fCsv').onclick = () => (f.aba === 'paginas' ? exportarCSV('anunciantes', itens, csvAnunciantes)
+    : f.aba === 'agrupadas' ? exportarCSV('ofertas-por-checkout', itens, [['Oferta', (o) => o.nome], ['Agrupado por', (o) => o.tipo_chave], ['Anúncios ativos', (o) => o.ativos],
+      ['Páginas', (o) => o.membros.map((m) => m.nome).join(' | ')], ['Dias', (o) => o.dias], ['Gateway', (o) => o.gateways.join(', ')], ['Preço', (o) => o.preco], ['Preço em R$', (o) => o.preco_brl],
+      ['Tipo', (o) => TIPOS_OFERTA[o.tipo] || ''], ['Sites', (o) => o.dominios.join(' | ')]])
     : exportarCSV('ofertas', itens, [['Site', (o) => o.dominio], ['Status', (o) => o.status], ['Anúncios', (o) => o.ativos], ['Páginas', (o) => o.paginas.map((p) => p.nome).join(' | ')],
       ['Dias', (o) => o.dias], ['Gateways', (o) => (o.gateways || []).join(', ')], ['Preço', (o) => o.preco], ['Produto', (o) => o.produto], ['Score', (o) => o.score]]));
   carregar();
@@ -701,14 +744,21 @@ TELAS.config = async (el) => {
   <div class="cab"><div><h1>Configurações</h1><p>Nichos, palavras-chave, coleta e rotina automática</p></div><button class="pri" id="cfgSalvar">Salvar alterações</button></div>
   <div class="grade-2">
     <div class="painel-box"><div class="pb-cab"><h2>Nichos e palavras-chave</h2></div><div class="pb-corpo">
-      <p class="peq mut" style="margin-top:0">Uma linha por nicho: <code>Nicho: palavra 1, palavra 2</code>. Vale qualquer nicho e qualquer idioma.</p>
-      <textarea id="cfgNichos" style="min-height:380px">${esc(Object.entries(c.nichos).map(([n, ps]) => `${n}: ${ps.join(', ')}`).join('\n'))}</textarea></div></div>
+      <p class="peq mut" style="margin-top:0">Uma linha por nicho e idioma: <code>Nicho (pt): palavra 1, palavra 2</code>. Use <code>(es)</code> e <code>(en)</code> para as palavras em espanhol e inglês: cada país é buscado no idioma dele. Sem idioma, vale português.</p>
+      <textarea id="cfgNichos" style="min-height:380px">${esc(Object.entries(c.nichos).flatMap(([n, ps]) => Array.isArray(ps) ? [`${n}: ${ps.join(', ')}`]
+        : Object.entries(ps).map(([l, lista]) => `${n} (${l}): ${lista.join(', ')}`)).join('\n'))}</textarea></div></div>
     <div style="display:flex;flex-direction:column;gap:14px">
       <div class="painel-box"><div class="pb-cab"><h2>Coleta</h2></div><div class="pb-corpo"><div class="form-grade">
         <label class="campo">País padrão<select id="cfgPais">${opcoesPais(c.pais || 'BR')}</select></label>
         <label class="campo">Anúncios lidos por palavra<input id="cfgMax" type="number" value="${c.maxAnunciosPorPalavra || 150}"></label>
         <label class="campo">Páginas contadas por nicho<input id="cfgTop" type="number" value="${c.paginasParaAprofundar || 25}"></label>
-        <label class="campo">Domínios analisados por nicho<input id="cfgSites" type="number" value="${c.sitesParaAnalisar ?? 8}"></label></div></div></div>
+        <label class="campo">Domínios analisados por nicho<input id="cfgSites" type="number" value="${c.sitesParaAnalisar ?? 8}"></label>
+        <label class="campo">Analisar site a partir de (anúncios)<input id="cfgMinAn" type="number" value="${c.minAnunciosParaAnalisar ?? 8}"></label></div></div></div>
+      <div class="painel-box"><div class="pb-cab"><h2>Low ticket</h2></div><div class="pb-corpo"><div class="form-grade">
+        <label class="campo">Preço máximo para ser low ticket (R$)<input id="cfgLowMax" type="number" value="${c.precoMaxLowTicket ?? 97}"></label>
+        <label class="campo">Filtro de preço padrão nas listas (R$)<input id="cfgFiltro" type="number" value="${c.precoMaxFiltro ?? 47}"></label></div>
+        <label class="campo" style="margin-top:12px">Anunciantes ignorados (um por linha: nome ou site)<textarea id="cfgBloqueio" style="min-height:110px" placeholder="ex.: betterme">${esc((c.bloqueio || []).join('\n'))}</textarea></label>
+        <p class="peq mut" style="margin:6px 0 0">Marcas grandes e apps que aparecem em toda busca e não são ofertas para modelar.</p></div></div>
       <div class="painel-box"><div class="pb-cab"><h2>Rotina automática</h2><span class="mut peq">${c.nuvem ? 'rodando na nuvem' : 'modo local'}</span></div><div class="pb-corpo">
         <p class="peq mut" style="margin-top:0">A cada rodada: processa os pedidos, reconta os anunciantes acompanhados, minera o próximo nicho e país do rodízio e atualiza um gateway.</p>
         <div class="form-grade"><label class="campo">Anunciantes recontados por rodada<input id="cfgRotPag" type="number" value="${rot.paginasParaAtualizar || 80}"></label>
@@ -725,11 +775,17 @@ TELAS.config = async (el) => {
     for (const l of $('#cfgNichos').value.split('\n')) {
       const i = l.indexOf(':'); if (i < 1) continue;
       const ps = l.slice(i + 1).split(',').map((s) => s.trim()).filter(Boolean);
-      if (ps.length) nichos[l.slice(0, i).trim()] = ps;
+      const m = l.slice(0, i).trim().match(/^(.*?)\s*\((pt|es|en|fr|it|de)\)$/i);
+      const nome = (m ? m[1] : l.slice(0, i)).trim(), lang = m ? m[2].toLowerCase() : 'pt';
+      if (!nome || !ps.length) continue;
+      nichos[nome] = { ...(nichos[nome] || {}), [lang]: ps };
     }
     if (!Object.keys(nichos).length) return toast('Informe pelo menos um nicho');
-    const nova = { pais: $('#cfgPais').value, maxAnunciosPorPalavra: Number($('#cfgMax').value), paginasParaAprofundar: Number($('#cfgTop').value),
-      sitesParaAnalisar: Number($('#cfgSites').value), nichos,
+    const { gateways, nuvem, ...atual } = CONFIG;
+    const nova = { ...atual, pais: $('#cfgPais').value, maxAnunciosPorPalavra: Number($('#cfgMax').value), paginasParaAprofundar: Number($('#cfgTop').value),
+      sitesParaAnalisar: Number($('#cfgSites').value), minAnunciosParaAnalisar: Number($('#cfgMinAn').value), nichos,
+      precoMaxLowTicket: Number($('#cfgLowMax').value), precoMaxFiltro: Number($('#cfgFiltro').value),
+      bloqueio: $('#cfgBloqueio').value.split('\n').map((x) => x.trim()).filter(Boolean),
       rotina: { ...rot, paginasParaAtualizar: Number($('#cfgRotPag').value), maxPorGateway: Number($('#cfgRotGw').value),
         gateways: $$('#cfgGws .chip.on').map((x) => x.dataset.g), paises: $$('#cfgPaises .chip.on').map((x) => x.dataset.c) } };
     await post('/api/config', nova);

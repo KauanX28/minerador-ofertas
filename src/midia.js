@@ -69,21 +69,37 @@ async function gravar(nome, buf) {
 export async function processarMiniaturas({ limite = 250, log = () => {} } = {}) {
   if (URL_SB && !CHAVE_SERVICO) { log('  (miniaturas: defina SUPABASE_SERVICE_ROLE_KEY para guardar no Storage)'); return 0; }
   const { default: sharp } = await import('sharp');
+  const { hashImagem } = await import('./classificador.js');
+  const agoraS = () => Math.floor(Date.now() / 1000);
+  // Falhas recentes (link expirado) não são tentadas de novo por 1 dia.
   const pendentes = await all(`SELECT ad_id, thumb FROM anuncios WHERE ativo = 1 AND thumb IS NOT NULL AND thumb_arquivo IS NULL
-    ORDER BY dup DESC, visto_ultimo DESC LIMIT ?`, [limite]);
+    AND (thumb_em IS NULL OR thumb_em < ?) ORDER BY dup DESC, visto_ultimo DESC LIMIT ?`, [agoraS() - 86400, limite]);
   let ok = 0, falhas = 0;
   for (const a of pendentes) {
     try {
       const r = await fetch(a.thumb, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000) });
-      if (!r.ok) { falhas++; await run('UPDATE anuncios SET thumb_em = ? WHERE ad_id = ?', [Math.floor(Date.now() / 1000), a.ad_id]); continue; }
-      const webp = await sharp(Buffer.from(await r.arrayBuffer())).resize({ width: 320, withoutEnlargement: true }).webp({ quality: 55 }).toBuffer();
+      if (!r.ok) { falhas++; await run('UPDATE anuncios SET thumb_em = ? WHERE ad_id = ?', [agoraS(), a.ad_id]); continue; }
+      const original = Buffer.from(await r.arrayBuffer());
+      const webp = await sharp(original).resize({ width: 320, withoutEnlargement: true }).webp({ quality: 55 }).toBuffer();
+      const phash = await hashImagem(original).catch(() => null);
       if (await gravar(a.ad_id, webp)) {
-        await run('UPDATE anuncios SET thumb_arquivo = ?, thumb_em = ? WHERE ad_id = ?', [`ads/${a.ad_id}.webp`, Math.floor(Date.now() / 1000), a.ad_id]);
+        await run('UPDATE anuncios SET thumb_arquivo = ?, thumb_em = ?, phash = ? WHERE ad_id = ?', [`ads/${a.ad_id}.webp`, agoraS(), phash, a.ad_id]);
         ok++;
       } else falhas++;
-    } catch { falhas++; }
+    } catch { falhas++; await run('UPDATE anuncios SET thumb_em = ? WHERE ad_id = ?', [agoraS(), a.ad_id]).catch(() => {}); }
   }
   if (pendentes.length) log(`  miniaturas: ${ok} salvas, ${falhas} falharam (link expirado ou bloqueado)`);
+  // Hash perceptual das miniaturas antigas que ainda não têm (lê a própria cópia).
+  const semHash = await all('SELECT ad_id FROM anuncios WHERE thumb_arquivo IS NOT NULL AND phash IS NULL LIMIT ?', [400]);
+  for (const a of semHash) {
+    try {
+      const buf = URL_SB
+        ? Buffer.from(await (await fetch(`${URL_SB}/storage/v1/object/public/${BUCKET}/ads/${a.ad_id}.webp`, { signal: AbortSignal.timeout(10000) })).arrayBuffer())
+        : fs.readFileSync(path.join(PASTA_LOCAL, `${a.ad_id}.webp`));
+      await run('UPDATE anuncios SET phash = ? WHERE ad_id = ?', [await hashImagem(buf), a.ad_id]);
+    } catch { await run("UPDATE anuncios SET phash = '-' WHERE ad_id = ?", [a.ad_id]).catch(() => {}); }
+  }
+  if (semHash.length) log(`  hash de imagem calculado para ${semHash.length} miniaturas antigas`);
   return ok;
 }
 

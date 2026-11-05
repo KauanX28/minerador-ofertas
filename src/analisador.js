@@ -1,6 +1,12 @@
 // Raio-X de uma página de vendas / quiz / checkout, seguindo o checklist dos vídeos de mineração:
 // gateway e link de checkout, preço, player de VSL, quiz, rastreadores, construtor da página e sitemap.xml.
+import { devices } from 'playwright';
 import { detectarGateway, hostDe, GATEWAYS } from './util.js';
+
+// Perfil de celular brasileiro: é assim que quem clica no anúncio vê a página.
+async function contextoCelular(ctx) {
+  return ctx.browser().newContext({ ...devices['iPhone 13'], locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
+}
 
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -80,7 +86,8 @@ async function lerSitemap(ctx, dominio) {
 // Abre a página no navegador (para pegar conteúdo gerado por JavaScript) e devolve o raio-X.
 export async function analisarPagina(ctx, url, { sitemap = true } = {}) {
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-  const page = await ctx.newPage();
+  const movel = await contextoCelular(ctx);
+  const page = await movel.newPage();
   const requisicoes = new Set();
   page.on('request', (r) => requisicoes.add(r.url()));
   const res = { url, ok: false };
@@ -126,28 +133,43 @@ export async function analisarPagina(ctx, url, { sitemap = true } = {}) {
     res.erro = String(e.message || e).slice(0, 200);
   } finally {
     await page.close();
+    await movel.close();
   }
   return res;
 }
 
-// Abre um checkout e tenta extrair o nome do produto e o preço.
+// Abre um checkout e extrai nome do produto e preço à vista. Funciona para os gateways do Brasil e de fora:
+// procura primeiro os campos de produto que cada plataforma usa, depois og:title e o título da aba.
+const RUINS_PRODUTO = /checkout|pagamento|finalizar|compra segura|seus dados|dados pessoais|identifica|resumo|1 item|carrinho|order summary|informa[cç][oõ]es|oferta (expira|termina)|valor promocional|encerra em|garantia|cupom|entrega|dados cadastrais|aguarde|carregando|loading|\d+\s*x\s*de|R\$|US\$|€|^\d+\s*[-.)]\s|^\s*[\d:\s]+$|^(total|subtotal|pix|cart[aã]o|boleto)\b/i;
+const SELETORES_PRODUTO = [
+  '[data-testid*="product" i]', '[class*="product-name" i]', '[class*="productName" i]', '[class*="product_name" i]', '[class*="product-title" i]',
+  '[class*="productTitle" i]', '[class*="offer-name" i]', '[class*="offerName" i]', '[class*="item-name" i]', '[class*="itemName" i]',
+  '[class*="nome-produto" i]', '[class*="produto" i] h1', '[class*="produto" i] h2', 'h1', 'h2', 'h3',
+];
+
 export async function lerCheckout(ctx, url) {
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
   const page = await ctx.newPage();
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 40000 });
     await espera(4500);
-    const d = await page.evaluate(() => {
-      const og = document.querySelector('meta[property="og:title"]')?.content;
-      const cand = [...document.querySelectorAll('h1,h2,h3,[class*="product" i] [class*="name" i],[class*="title" i]')]
-        .map((e) => e.innerText?.trim()).filter((t) => t && t.length > 3 && t.length < 120);
-      return { titulo: document.title, og, cand, texto: document.body?.innerText?.slice(0, 20000) || '' };
-    });
-    const ruins = /checkout|pagamento|finalizar|compra segura|seus dados|identifica|oferta (expira|termina)|^\s*[\d:\s]+$|^cakto$|^kiwify$|^hotmart$|^kirvano$/i;
+    const ler = () => page.evaluate((sels) => {
+      const og = document.querySelector('meta[property="og:title"]')?.content || null;
+      const cand = [];
+      for (const s of sels) for (const e of document.querySelectorAll(s)) { const t = e.innerText?.trim().split('\n')[0]; if (t && t.length > 3 && t.length < 140) cand.push(t); }
+      const ld = [...document.querySelectorAll('script[type="application/ld+json"]')].map((x) => x.textContent).join(' ');
+      return { titulo: document.title, og, cand, ld, texto: document.body?.innerText?.slice(0, 20000) || '' };
+    }, SELETORES_PRODUTO);
+    let d = await ler();
+    let precos = precosDoTexto(d.texto).filter((p) => !/^(R\$|US\$|\$|€)\s?0+([.,]0+)?$/.test(p));
+    if (!precos.length) { await page.waitForLoadState('networkidle', { timeout: 12000 }).catch(() => {}); await espera(2500); d = await ler(); precos = precosDoTexto(d.texto).filter((p) => !/^(R\$|US\$|\$|€)\s?0+([.,]0+)?$/.test(p)); }
+    const ldPreco = d.ld.match(/"price"\s*:\s*"?(\d+(?:\.\d+)?)/)?.[1];
+    const ldMoeda = d.ld.match(/"priceCurrency"\s*:\s*"([A-Z]{3})"/)?.[1];
+    if (ldPreco && !precos.length) precos = [`${ldMoeda === 'BRL' || !ldMoeda ? 'R$' : ldMoeda === 'USD' ? 'US$' : ldMoeda + ' '}${ldPreco.replace('.', ',')}`];
     const nomesGw = new Set(GATEWAYS.map((g) => g.nome.toLowerCase()));
-    const produto = [d.og, ...d.cand, d.titulo].find((t) => t && !ruins.test(t) && !nomesGw.has(t.trim().toLowerCase())) || d.titulo || null;
-    const precos = precosDoTexto(d.texto);
-    const indisponivel = /indispon[ií]vel|n[aã]o encontrad|not found|desativad|404/i.test(d.texto.slice(0, 2000)) && precos.length === 0;
+    const limpar = (t) => String(t || '').replace(/^\s*(checkout|pagamento)\s*[|\-–—:]\s*/i, '').replace(/\s*[|\-–—]\s*(hotmart|kiwify|cakto|kirvano|eduzz|ticto|perfect ?pay|hubla|braip|greenn|payt|monetizze|checkout).*$/i, '').trim();
+    const produto = [...d.cand, d.og, d.titulo].map(limpar).find((t) => t && t.length > 3 && !RUINS_PRODUTO.test(t) && !nomesGw.has(t.toLowerCase())) || limpar(d.titulo) || null;
+    const indisponivel = /indispon[ií]vel|n[aã]o encontrad|not found|desativad|404|expirad/i.test(d.texto.slice(0, 2000)) && precos.length === 0;
     return { produto: produto?.slice(0, 140) || null, preco: precos[0] || null, precos, ok: !indisponivel };
   } catch {
     return { produto: null, preco: null, ok: false };

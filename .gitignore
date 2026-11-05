@@ -6,3 +6,4 @@ dados/
 
 .vercel
 .env*
+.claude/
