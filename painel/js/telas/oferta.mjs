@@ -1,6 +1,7 @@
 // Página da oferta (/oferta/:id) com abas: visão geral, criativos, funil, página, checkout, histórico e modelar.
 import { useState } from 'preact/hooks';
 import { html, useDados, navegar, nomePais, loja, fmt, relativo, bib, copiar, rodarTarefa, TIPOS_OFERTA, diasDesde, dataCurta } from '../base.mjs';
+import { Ocultar } from '../ui.mjs';
 import { Ic, Status, Gws, Preco, Score, Grafico, Ent, Estrela, Kpi, Esqueleto, Erro, Vazio, Abas, CartaoAnuncio, ModalModelar, Tabela, TipoTag } from '../ui.mjs';
 import { Validacao } from './validacao.mjs';
 import { ModalIA } from './iamodal.mjs';
@@ -19,8 +20,8 @@ export function TelaOferta({ id, aba }) {
   return html`
     <div class="cab oferta-cab">
       <div><div class="migalha"><a href="/ofertas">Ofertas</a> / ${p.nome}</div>
-        <div class="linha"><${Ent} img=${p.foto || p.thumb} t1=${p.nome} t2=${[p.produto, p.dominios?.[0]].filter(Boolean).join(' · ')} /><${Status} s=${p.status} /><${TipoTag} t=${p.tipo} /></div></div>
-      <div class="linha"><${Estrela} tipo="pagina" chave=${p.page_id} nome=${p.nome} on=${p.favorito} />
+        <div class="linha"><${Ent} img=${p.foto || p.thumb} t1=${p.nome} t2=${[p.produto, p.dominios?.[0]].filter(Boolean).join(' · ')} /><${Status} s=${p.status} /><${TipoTag} t=${p.tipo} />${p.tipo === 'marca' ? html`<span class="mut peq" title=${p.tipoMotivo}>marca grande: ${p.tipoMotivo}</span>` : null}</div></div>
+      <div class="linha"><${Ocultar} pageId=${p.page_id} nome=${p.nome} /><${Estrela} tipo="pagina" chave=${p.page_id} nome=${p.nome} on=${p.favorito} />
         <a class="botao" href=${bib.pagina(p.page_id)} target="_blank" rel="noopener"><${Ic} n="externo" /> Biblioteca</a>
         <button class="pri" onClick=${() => navegar(base + '/modelar')}>Modelar esta oferta</button></div>
     </div>

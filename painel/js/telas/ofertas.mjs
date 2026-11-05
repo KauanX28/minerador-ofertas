@@ -2,6 +2,7 @@
 import { useState } from 'preact/hooks';
 import { html, loja, useLoja, useDados, useParams, nomePais, fmt, TIPOS_OFERTA, STATUS, exportarCSV, exportarXLSX, bib, brl, rodarTarefa } from '../base.mjs';
 import { FocoNicho } from '../foco.mjs';
+import { Ocultar } from '../ui.mjs';
 import { Ic, CartaoOferta, Tabela, Esqueleto, Vazio, Erro, Status, Gws, Preco, Score, Spark, Ent, Estrela, Paginacao, Abas, comparar, Grafico } from '../ui.mjs';
 
 const ATALHOS = [
@@ -20,14 +21,14 @@ const COLS_CSV = [['Anunciante', (p) => p.nome], ['País', () => loja.pais], ['S
 export function TelaOfertas() {
   const l = useLoja();
   const padrao = { aba: 'anunciantes', tipo: 'low', preco: String(l.config?.precoMaxFiltro ?? 47), sempreco: '1', idioma: '', nicho: '', status: '', funil: '', formato: '',
-    vsl: '', quiz: '', checkout: '', plr: '', acelerando: '', gringa: '', gateway: '', min: '', dias: '', busca: '', ordem: 'score', visao: 'cards', pagina: '1' };
+    vsl: '', quiz: '', checkout: '', plr: '', acelerando: '', gringa: '', gateway: '', min: '', dias: '', busca: '', ordem: 'score', visao: 'cards', pagina: '1', marcas: '' };
   const [f, mudar] = useParams(padrao);
   const [maisFiltros, setMais] = useState(false);
   const [versao, setVersao] = useState(0); // sobe quando o robô traz dados novos (recarrega a lista)
   const [aoVivo, setAoVivo] = useState(false);
   const qs = new URLSearchParams({ tipo: f.tipo, precoMax: f.preco, semPreco: f.sempreco, idioma: f.idioma, nicho: f.nicho, status: f.status, funil: f.funil, formato: f.formato,
     vsl: f.vsl, quiz: f.quiz, checkout: f.checkout, plr: f.plr, acelerando: f.acelerando, gringa: f.gringa, gateway: f.gateway, min: f.min, dias: f.dias, busca: f.busca,
-    ordem: f.ordem, pagina: f.pagina, por: 48 }).toString();
+    ordem: f.ordem, pagina: f.pagina, por: 48, marcas: f.marcas }).toString();
   const r = useDados(f.aba === 'anunciantes' ? '/api/paginas?' + qs : '/api/ofertas-agrupadas?' + qs, [qs, f.aba, versao]);
   const atalho = ATALHOS.find(([, , v]) => Object.entries(v).every(([k, x]) => (f[k] || '') === x))?.[0];
   const ativos = ['idioma', 'nicho', 'status', 'funil', 'formato', 'vsl', 'quiz', 'checkout', 'gateway', 'min', 'dias'].filter((k) => f[k]).length;
@@ -63,7 +64,8 @@ export function TelaOfertas() {
       <label class="campo">Mínimo de anúncios ativos<input type="number" min="0" value=${f.min} onChange=${(e) => mudar({ min: e.target.value })} placeholder="ex.: 15" /></label>
       <label class="campo">Rodando há pelo menos (dias)<input type="number" min="0" value=${f.dias} onChange=${(e) => mudar({ dias: e.target.value })} placeholder="ex.: 14" /></label>
       <div class="campo">Tem<div class="linha">${check('vsl', 'VSL')}${check('quiz', 'Quiz')}${check('checkout', 'Checkout conhecido')}</div>
-        <label class="check-l"><input type="checkbox" checked=${f.sempreco === '1'} onChange=${(e) => mudar({ sempreco: e.target.checked ? '1' : '0' })} /> incluir quem ainda não tem preço lido</label></div>
+        <label class="check-l"><input type="checkbox" checked=${f.sempreco === '1'} onChange=${(e) => mudar({ sempreco: e.target.checked ? '1' : '0' })} /> incluir quem ainda não tem preço lido</label>
+        <label class="check-l"><input type="checkbox" checked=${f.marcas === '1'} onChange=${(e) => mudar({ marcas: e.target.checked ? '1' : '' })} /> mostrar marcas grandes (ficam ocultas)</label></div>
       <div class="campo"><span> </span><button class="fantasma" onClick=${() => mudar(Object.fromEntries(Object.keys(padrao).filter((k) => !['aba', 'visao'].includes(k)).map((k) => [k, padrao[k]])))}>Limpar filtros</button></div>
     </div></div>` : null}
     ${f.nicho && f.nicho !== 'Avulso' ? html`<${FocoNicho} nicho=${f.nicho} onAtualizar=${() => setVersao((v) => v + 1)} onEstado=${setAoVivo} />` : null}
@@ -95,7 +97,7 @@ function TabelaOfertas({ itens }) {
     { t: 'Funil', v: (p) => p.funil || '—' },
     { t: 'Nota', k: 'score', v: (p) => html`<${Score} n=${p.score} fatores=${p.fatores} />` },
     { t: 'Modelar', k: 'oportunidade', cl: 'dir', v: (p) => html`<span title=${p.motivoOport}>${p.oportunidade}</span>` },
-    { t: '', cl: 'acoes', v: (p) => html`<${Estrela} tipo="pagina" chave=${p.page_id} nome=${p.nome} on=${p.favorito} />` },
+    { t: '', cl: 'acoes', v: (p) => html`<${Ocultar} pageId=${p.page_id} nome=${p.nome} /><${Estrela} tipo="pagina" chave=${p.page_id} nome=${p.nome} on=${p.favorito} />` },
   ]} />`;
 }
 

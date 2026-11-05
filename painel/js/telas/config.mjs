@@ -71,7 +71,7 @@ export function TelaConfig() {
         <${PainelIA} />
         <${PainelExtensao} />
         <div class="painel-box"><div class="pb-cab"><h2>Anunciantes ignorados</h2></div><div class="pb-corpo">
-          <p class="mut peq" style="margin-top:0">Marcas e apps que aparecem em toda busca e não são ofertas para modelar. Vale nome ou site. Aplica na próxima rodada do robô.</p>
+          <p class="mut peq" style="margin-top:0">Marcas grandes são reconhecidas sozinhas (site muito acessado, empresa na Wikidata, página gigante, várias páginas no mesmo site sem checkout) e ficam ocultas. Use esta lista para esconder mais alguém (ou o botão de ocultar em cada oferta). Para mostrar de novo, tire o nome daqui: vale na próxima rodada do robô.</p>
           <${ListaPalavras} palavras=${c.bloqueio || []} onTroca=${(b) => mudar({ bloqueio: b })} placeholder="+ marca ou site" /></div></div>
         <div class="painel-box"><div class="pb-cab"><h2>Rotina automática</h2><span class="mut peq">${nuvem ? '4x por dia no GitHub Actions' : 'modo local'}</span></div><div class="pb-corpo col-gap">
           <div class="form-grade">${num('Minutos por rodada', rot.minutosPorRodada ?? 40, (v) => mudarRot({ minutosPorRodada: v }))}

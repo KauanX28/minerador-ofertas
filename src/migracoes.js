@@ -184,4 +184,12 @@ export const MIGRACOES = [
       await rls(ctx, ['push_inscricoes', 'alertas_enviados']);
     },
   },
+  {
+    versao: 11,
+    nome: 'marcas grandes: cache de sinais públicos por domínio (Tranco e Wikidata)',
+    up: async (ctx) => {
+      await ctx.ddl('CREATE TABLE IF NOT EXISTS marcas_cache (dominio TEXT PRIMARY KEY, tranco INTEGER, wikidata TEXT, quando BIGINT)');
+      await rls(ctx, ['marcas_cache']);
+    },
+  },
 ];

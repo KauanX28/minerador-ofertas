@@ -1,6 +1,6 @@
 // Componentes visuais reutilizados em todas as telas.
 import { useState } from 'preact/hooks';
-import { html, fmt, compacto, brl, diasDesde, STATUS, bib, copiar, favoritar, loja, definir, nomeGateway, TIPOS_OFERTA, dataCurta, rodarTarefa } from './base.mjs';
+import { html, fmt, compacto, brl, diasDesde, STATUS, bib, copiar, favoritar, loja, definir, nomeGateway, TIPOS_OFERTA, dataCurta, rodarTarefa, post, aviso } from './base.mjs';
 
 const ICONES = {
   inicio: 'M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
@@ -34,6 +34,7 @@ const ICONES = {
   alvo: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4',
   menu: 'M3 6h18M3 12h18M3 18h18',
   mais: 'M12 5v14M5 12h14',
+  ocultar: 'M17.9 17.9A10 10 0 0 1 12 20c-7 0-11-8-11-8a18 18 0 0 1 5.1-5.9M9.9 4.2A9 9 0 0 1 12 4c7 0 11 8 11 8a18 18 0 0 1-2.2 3.2M1 1l22 22',
 };
 export const Ic = ({ n, t = 16 }) => html`<svg class="ic" width=${t} height=${t} viewBox="0 0 24 24" aria-hidden="true"><path d=${ICONES[n] || ''} /></svg>`;
 
@@ -79,6 +80,14 @@ export function Grafico({ serie, h = 140 }) {
 export const Ent = ({ img, t1, t2 }) => html`<div class="ent">${img ? html`<img src=${img} loading="lazy" alt="" />` : html`<div class="av"></div>`}
   <div><div class="t1" title=${t1}>${t1}</div>${t2 ? html`<div class="t2" title=${t2}>${t2}</div>` : null}</div></div>`;
 
+// Ocultar anunciante (marca grande, app, o que não interessa): some de todas as listas e entra na lista de bloqueio.
+export function Ocultar({ pageId, nome, onOculto }) {
+  const [feito, set] = useState(false);
+  if (feito) return html`<span class="mut peq">oculto</span>`;
+  return html`<button class="bt-ic" title=${'Ocultar ' + (nome || '') + ' (marca grande ou não interessa)'} aria-label="Ocultar anunciante"
+    onClick=${async (e) => { e.preventDefault(); e.stopPropagation(); await post('/api/ocultar', { page_id: pageId }); set(true); aviso((nome || 'Anunciante') + ' oculto. Para mostrar de novo: Configurações → Anunciantes ignorados.'); onOculto?.(); }}><${Ic} n="ocultar" /></button>`;
+}
+
 export function Estrela({ tipo, chave, nome, on }) {
   const [ativo, set] = useState(!!on);
   return html`<button class=${'bt-ic' + (ativo ? ' on' : '')} title=${ativo ? 'Remover de Minhas listas' : 'Salvar em Minhas listas'} aria-pressed=${ativo}
@@ -116,6 +125,8 @@ export function Tabela({ linhas, colunas, ordemInicial, vazio = 'Nenhum resultad
 
 // Card do feed de ofertas.
 export function CartaoOferta({ p, selecionado, onSelecionar }) {
+  const [oculto, setOculto] = useState(false);
+  if (oculto) return null;
   return html`<article class="card">
     <a href=${'/oferta/' + encodeURIComponent(p.page_id)} class="card-link" aria-label=${'Abrir ' + p.nome}>
       <div class="card-midia">${p.thumb ? html`<img src=${p.thumb} loading="lazy" alt="" />` : html`<div class="sem-img">${(p.nome || '?')[0]}</div>`}
@@ -135,6 +146,7 @@ export function CartaoOferta({ p, selecionado, onSelecionar }) {
       <span class="peq mut" title=${p.motivoOport}>modelar ${p.oportunidade}</span>
       <span style="flex:1"></span>
       ${onSelecionar ? html`<label class="bt-ic" title="Comparar"><input type="checkbox" checked=${selecionado} onChange=${() => onSelecionar(p.page_id)} /></label>` : null}
+      <${Ocultar} pageId=${p.page_id} nome=${p.nome} onOculto=${() => setOculto(true)} />
       <${Estrela} tipo="pagina" chave=${p.page_id} nome=${p.nome} on=${p.favorito} />
     </div></article>`;
 }

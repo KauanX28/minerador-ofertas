@@ -42,7 +42,7 @@ const COLS = [['Página', (a) => a.page_name], ['Dias', (a) => diasDesde(a.inici
 
 export function TelaCriativos() {
   const l = useLoja();
-  const [f, mudar] = useParams({ texto: '', formato: '', dup: '', ordem: 'dup', cta: '', plataforma: '', gateway: '', dias: '' });
+  const [f, mudar] = useParams({ texto: '', formato: '', dup: '', ordem: 'dup', cta: '', plataforma: '', gateway: '', dias: '', marcas: '' });
   const [modelar, setModelar] = useState(null);
   const [modo, setModo] = useState('palavra');
   const qs = new URLSearchParams({ ...f, limite: 240 }).toString();
@@ -60,6 +60,7 @@ export function TelaCriativos() {
       <select value=${f.cta} onChange=${(e) => mudar({ cta: e.target.value })} aria-label="Chamada"><option value="">Qualquer CTA</option><option value="Saiba mais">Saiba mais</option><option value="Comprar">Comprar agora</option><option value="WhatsApp">WhatsApp</option><option value="Inscreva">Inscreva-se</option><option value="Baixar">Baixar</option></select>
       <select value=${f.gateway} onChange=${(e) => mudar({ gateway: e.target.value })} aria-label="Gateway"><option value="">Qualquer gateway</option>${(l.config?.gateways || []).map((g) => html`<option value=${g.id}>${g.nome}</option>`)}</select>
       <input type="number" min="1" placeholder="Mín. variações" value=${f.dup} onChange=${(e) => mudar({ dup: e.target.value })} style="width:130px" aria-label="Mínimo de variações" />
+      <label class="check-l"><input type="checkbox" checked=${f.marcas === '1'} onChange=${(e) => mudar({ marcas: e.target.checked ? '1' : '' })} /> mostrar marcas grandes</label>
       <input type="number" min="0" placeholder="No ar há (dias)" value=${f.dias} onChange=${(e) => mudar({ dias: e.target.value })} style="width:130px" aria-label="Dias no ar" />
     </div>
     ${r.erro ? html`<${Erro} msg=${r.erro} />` : r.carregando ? html`<${Esqueleto} cards=${8} />` : html`

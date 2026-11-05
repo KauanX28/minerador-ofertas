@@ -54,6 +54,8 @@ export async function desembrulharLinks({ limite = 60, log = () => {} } = {}) {
 // Classifica todos os anunciantes (tipo de oferta, idioma predominante).
 export async function classificarAnunciantes({ log = () => {} } = {}) {
   const config = await lerConfig();
+  const { mapaMarcas, ehPlataforma } = await import('./marcas.js');
+  const marcas = await mapaMarcas().catch(() => new Map());
   const bloqueio = config.bloqueio || BLOQUEIO_PADRAO;
   const limiteLow = Number(config.precoMaxLowTicket ?? 97);
   const cambio = await cambioHoje();
@@ -69,6 +71,9 @@ export async function classificarAnunciantes({ log = () => {} } = {}) {
   const mapaAn = new Map();
   for (const r of analises) { const d = JSON.parse(r.dados); mapaAn.set(r.dominio, d); if (!mapaAn.has(raizDominio(r.dominio))) mapaAn.set(raizDominio(r.dominio), d); }
   const precoCk = new Map(checkouts.map((c) => [c.checkout, c.preco_brl]));
+  // Quantas páginas diferentes anunciam cada site (marcas costumam ter várias páginas no mesmo site, sem checkout).
+  const paginasPorRaiz = new Map();
+  for (const a of ads) { if (!a.dominio) continue; const h = a.dominio.split('/')[0]; if (ehPlataforma(h)) continue; const r = raizDominio(h); if (!paginasPorRaiz.has(r)) paginasPorRaiz.set(r, new Set()); paginasPorRaiz.get(r).add(a.page_id); }
   const t = agora();
   const cont = {};
   const atualizacoes = [];
@@ -83,7 +88,9 @@ export async function classificarAnunciantes({ log = () => {} } = {}) {
     const precoBrl = cks.map((c) => precoCk.get(c)).find((v) => v != null)
       ?? (analise?.checkouts || []).map((c) => precoCk.get(c.checkout)).find((v) => v != null)
       ?? precoDosTextos(lista.map((a) => a.texto), cambio);
-    const r = classificar({ nome: p.nome, categorias: p.categorias, curtidas: p.curtidas, anuncios: lista, analise, precoBrl, bloqueio, limiteLow });
+    const raiz = dom && !ehPlataforma(dom) ? raizDominio(dom) : null;
+    const r = classificar({ nome: p.nome, categorias: p.categorias, curtidas: p.curtidas, anuncios: lista, analise, precoBrl, bloqueio, limiteLow,
+      marca: raiz ? marcas.get(raiz) : null, paginasNoSite: raiz ? paginasPorRaiz.get(raiz)?.size || 1 : 1 });
     const idiomas = {};
     for (const a of lista) if (a.idioma) idiomas[a.idioma] = (idiomas[a.idioma] || 0) + 1;
     const idioma = Object.entries(idiomas).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
@@ -172,8 +179,9 @@ export async function montarOfertas({ log = () => {} } = {}) {
 }
 
 // Tudo o que roda sem navegador, na ordem certa.
-export async function enriquecerTudo({ log = () => {} } = {}) {
+export async function enriquecerTudo({ log = () => {}, limiteMarcas = 120, temTempo } = {}) {
   await atualizarPrecos();
+  if (limiteMarcas) { const { verificarMarcas } = await import('./marcas.js'); await verificarMarcas({ limite: limiteMarcas, log, temTempo }).catch((e) => log(`  marcas: ${e.message}`)); }
   const n = await marcarAnuncios();
   if (n) log(`  idioma/hash de texto: ${n} anúncios`);
   await desembrulharLinks({ log });

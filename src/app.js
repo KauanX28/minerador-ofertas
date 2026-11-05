@@ -23,7 +23,8 @@ function filtrarRanking(lista, q) {
   const sim = (v) => v === '1' || v === 'true';
   const busca = String(q.busca || '').toLowerCase();
   const nichos = String(q.nichos || '').split('|').filter(Boolean);
-  let r = lista.filter((x) => (!nichos.length || nichos.some((n) => (x.nichos || []).includes(n))) && (!q.status || x.status === q.status) && (!q.funil || x.funil === q.funil) && (!q.formato || x.formato === q.formato)
+  const verMarcas = q.marcas === '1' || String(q.tipo || '').split(',').includes('marca');
+  let r = lista.filter((x) => (verMarcas || x.tipo !== 'marca') && (!nichos.length || nichos.some((n) => (x.nichos || []).includes(n))) && (!q.status || x.status === q.status) && (!q.funil || x.funil === q.funil) && (!q.formato || x.formato === q.formato)
     && (!sim(q.vsl) || x.temVsl) && (!sim(q.quiz) || x.temQuiz) && (!sim(q.checkout) || x.checkoutConhecido) && (!sim(q.plr) || x.plr)
     && (!sim(q.acelerando) || ['Nova acelerando', 'Escalando agora'].includes(x.status)) && (!sim(q.gringa) || x.semEquivalenteBR)
     && (!busca || [x.nome, x.produto, ...(x.dominios || [])].join(' ').toLowerCase().includes(busca)));
@@ -378,6 +379,17 @@ Dados: ${JSON.stringify(dados).slice(0, 6000)}`;
       if (rota === '/api/alertas/teste' && req.method === 'POST') return json(res, await al.avisar('🔔 Teste de alerta', 'Se você está lendo isto, os alertas estão funcionando.'));
       if (rota === '/api/relatorio') return json(res, { ...(await al.relatorio({ pais })), telegram: !!process.env.TELEGRAM_BOT_TOKEN, canal: !!process.env.TELEGRAM_CANAL_ID, email: !!process.env.SMTP_USER });
     }
+    if (rota === '/api/ocultar' && req.method === 'POST') {
+      // Esconde um anunciante para sempre: entra na lista de bloqueio e some das listas na hora.
+      const b = await corpo(req);
+      const pg = b.page_id ? await get('SELECT page_id, nome FROM paginas WHERE page_id = ?', [String(b.page_id)]) : null;
+      if (!pg) return json(res, { erro: 'anunciante não encontrado' }, 404);
+      const cfg = await lerConfig();
+      const lista = cfg.bloqueio || [];
+      if (!lista.some((x) => x.toLowerCase() === pg.nome.toLowerCase())) await salvarConfig({ ...cfg, bloqueio: [...lista, pg.nome] });
+      await run("UPDATE paginas SET tipo = 'marca', tipo_motivo = 'ocultado por você' WHERE page_id = ?", [pg.page_id]);
+      return json(res, { ok: true, nome: pg.nome });
+    }
     if (rota === '/api/prefs' && req.method === 'GET') {
       const r = await get("SELECT valor FROM prefs WHERE user_id = ? AND chave = 'perfil'", [uid()]);
       return json(res, r ? JSON.parse(r.valor) : {});
@@ -414,6 +426,7 @@ Dados: ${JSON.stringify(dados).slice(0, 6000)}`;
     if (rota === '/api/anuncios') {
       // Biblioteca de criativos salvos (swipe): filtros por texto, formato e mínimo de duplicações.
       const filtros = ['ativo = 1', 'pais = ?'], p = [pais];
+      if (q.marcas !== '1') filtros.push("page_id NOT IN (SELECT page_id FROM paginas WHERE tipo = 'marca')");
       if (q.texto) { filtros.push('(LOWER(texto) LIKE ? OR LOWER(titulo) LIKE ? OR LOWER(page_name) LIKE ?)'); const t = `%${q.texto.toLowerCase()}%`; p.push(t, t, t); }
       if (q.formato) { filtros.push('formato = ?'); p.push(q.formato); }
       if (q.dup) { filtros.push('dup >= ?'); p.push(Number(q.dup)); }

@@ -60,7 +60,7 @@ export async function buscarPorSignificado(vetor, pais, limite = 48) {
   if (usaPostgres) {
     const v = '[' + vetor.join(',') + ']';
     return all(`SELECT ${campos}, 1 - (embedding <=> ?::vector) similaridade FROM anuncios
-      WHERE ativo = 1 AND pais = ? AND embedding IS NOT NULL ORDER BY embedding <=> ?::vector LIMIT ?`, [v, pais, v, limite]);
+      WHERE ativo = 1 AND pais = ? AND embedding IS NOT NULL AND page_id NOT IN (SELECT page_id FROM paginas WHERE tipo = 'marca') ORDER BY embedding <=> ?::vector LIMIT ?`, [v, pais, v, limite]);
   }
   // Local: poucos milhares de anúncios, a conta de similaridade em JavaScript é rápida.
   const linhas = await all(`SELECT ${campos}, embedding FROM anuncios WHERE ativo = 1 AND pais = ? AND embedding IS NOT NULL`, [pais]);

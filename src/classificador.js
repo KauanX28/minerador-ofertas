@@ -91,7 +91,9 @@ const CAT_LOCAL = ['local', 'clínica', 'clinica', 'dentist', 'salão', 'salon',
  * análise do domínio (opcional), preço em reais (opcional), lista de bloqueio, limite de low ticket.
  * Saída: { tipo, motivo, bloqueado }.
  */
-export function classificar({ nome = '', categorias = '', curtidas = 0, anuncios = [], analise = null, precoBrl = null, bloqueio = [], limiteLow = 97 }) {
+const CAT_MARCA = ['restaurant', 'restaurante', 'fast food', 'bank', 'banco', 'telecom', 'retail company', 'varejo', 'supermarket', 'supermercado', 'airline', 'automotive', 'software', 'internet company', 'insurance', 'seguro', 'beverage', 'bebida', 'brand', 'marca', 'consumer products', 'clothing (brand)', 'shopping & retail', 'e-commerce website', 'pharmacy', 'farmácia', 'hotel', 'university', 'universidade'];
+
+export function classificar({ nome = '', categorias = '', curtidas = 0, anuncios = [], analise = null, precoBrl = null, bloqueio = [], limiteLow = 97, marca = null, paginasNoSite = 1 }) {
   const textos = anuncios.map((a) => `${a.titulo || ''} ${a.texto || ''}`.toLowerCase()).join(' \n ');
   const links = anuncios.map((a) => String(a.link || '').toLowerCase());
   const ctas = anuncios.map((a) => String(a.cta || '').toLowerCase()).join(' | ');
@@ -99,7 +101,8 @@ export function classificar({ nome = '', categorias = '', curtidas = 0, anuncios
   const cat = String(categorias || '').toLowerCase();
   const nomeL = nome.toLowerCase();
 
-  const bloq = bloqueio.find((b) => b && (nomeL.includes(b.toLowerCase()) || hosts.some((h) => h.includes(b.toLowerCase()))));
+  const palavra = (b) => new RegExp('(^|[^a-z0-9à-ú])' + b.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^a-z0-9à-ú])');
+  const bloq = bloqueio.find((b) => b && (palavra(b).test(nomeL) || hosts.some((h) => h.split('.').some((parte) => parte.replace(/-/g, '') === b.toLowerCase().replace(/[\s-]/g, '')))));
   if (bloq) return { tipo: 'marca', motivo: `lista de bloqueio: ${bloq}`, bloqueado: true };
 
   const pts = { low: 0, info_alto: 0, app: 0, fisico: 0, lancamento: 0, local: 0, marca: 0, conversa: 0 };
@@ -134,9 +137,15 @@ export function classificar({ nome = '', categorias = '', curtidas = 0, anuncios
   const loc = tem(textos, P_LOCAL); if (loc.length) soma('local', Math.min(loc.length * 2, 6), `texto: ${loc[0]}`);
   if (CAT_LOCAL.some((c) => cat.includes(c))) soma('local', 3, `categoria: ${categorias}`);
 
-  if (curtidas >= 1_000_000 && !comGateway) soma('marca', 5, `${(curtidas / 1e6).toFixed(1)} mi de curtidas`);
+  // Marca grande: site muito acessado (Tranco), empresa cadastrada na Wikidata, página gigante, várias páginas no mesmo site.
+  if (marca?.tranco) { const t = marca.tranco; if (t <= 50000) soma('marca', 9, `site entre os 50 mil mais acessados do mundo (nº ${t})`); else if (t <= 150000) soma('marca', 7, `site entre os 150 mil mais acessados (nº ${t})`); else if (t <= 300000) soma('marca', 3, `site no top 300 mil (nº ${t})`); }
+  if (marca?.wikidata) soma('marca', 7, `empresa cadastrada na Wikidata (${marca.wikidata})`);
+  if (curtidas >= 1_000_000) soma('marca', comGateway ? 3 : 6, `${(curtidas / 1e6).toFixed(1)} mi de curtidas`); else if (curtidas >= 200_000 && !comGateway) soma('marca', 3, `${Math.round(curtidas / 1000)} mil curtidas`);
+  if (paginasNoSite >= 4 && !comGateway) soma('marca', 3, `${paginasNoSite} páginas anunciando o mesmo site`);
+  if (CAT_MARCA.some((c) => cat.includes(c)) && pts.marca > 0) soma('marca', 2, `categoria: ${categorias}`);
   if (hosts.some((h) => /\.(gov|edu)(\.[a-z]{2})?$/.test(h)) || /\b(universidade|faculdade|seguradora)\b/.test(nomeL)) soma('marca', 4, 'instituição/marca');
 
+  if (pts.marca < 6) pts.marca = 0; // marca grande exige sinal forte: site muito acessado, Wikidata ou 1 mi+ de curtidas
   const [melhor, valor] = Object.entries(pts).sort((a, b) => b[1] - a[1])[0];
   if (valor < 3) return { tipo: 'indefinido', motivo: 'poucos sinais', bloqueado: false };
   if (melhor === 'low') {

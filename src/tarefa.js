@@ -332,7 +332,7 @@ async function processarFila(ctx, o) {
       await run('UPDATE tarefas SET status = ?, fim = ?, erro = ?, log = ? WHERE id = ?', [status, agora(), erro, linhas.slice(-300).join('\n'), item.id]);
     }
     // No modo prontidão, preço/ofertas agrupadas são atualizados a cada pedido (sem esperar o robô encerrar).
-    if (esperar) { await enriquecerTudo({ log }).catch(() => {}); ocioso = Date.now(); }
+    if (esperar) { await enriquecerTudo({ log, limiteMarcas: 25 }).catch(() => {}); ocioso = Date.now(); }
   }
 }
 
