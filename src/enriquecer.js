@@ -1,6 +1,6 @@
 // Enriquecimento automático (roda no robô ao fim de cada coleta, sem navegador):
 // preço em reais, idioma/hash dos anúncios, links encurtados, tipo de cada anunciante e ofertas agrupadas por checkout.
-import { all, get, run, tx } from './banco.js';
+import { all, get, run, tx, atualizarLote } from './banco.js';
 import { agora, lerConfig } from './db.js';
 import { classificar, idiomaDe, hashTexto, lerPreco, paraBRL, precoDosTextos } from './classificador.js';
 import { cambioHoje } from './cambio.js';
@@ -15,22 +15,16 @@ const ENCURTADORES = ['bit.ly', 'tinyurl.com', 'cutt.ly', 'encurtador.com.br', '
 export async function atualizarPrecos() {
   const cambio = await cambioHoje();
   const lista = await all('SELECT checkout, preco FROM checkouts WHERE preco IS NOT NULL');
-  for (const c of lista) {
-    const p = lerPreco(c.preco);
-    await run('UPDATE checkouts SET preco_valor = ?, moeda = ?, preco_brl = ? WHERE checkout = ?', [p?.valor ?? null, p?.moeda ?? null, paraBRL(p, cambio), c.checkout]);
-  }
+  await atualizarLote('checkouts', 'checkout', [['preco_valor', 'real'], ['moeda', 'text'], ['preco_brl', 'real']],
+    lista.map((c) => { const p = lerPreco(c.preco); return [c.checkout, p?.valor ?? null, p?.moeda ?? null, paraBRL(p, cambio)]; }));
 }
 
 // Idioma e hash de texto dos anúncios que ainda não têm.
 export async function marcarAnuncios(limite = 5000) {
   const lista = await all('SELECT ad_id, titulo, texto FROM anuncios WHERE texto_hash IS NULL AND texto IS NOT NULL LIMIT ?', [limite]);
   if (!lista.length) return 0;
-  await tx(async (db) => {
-    for (const a of lista) {
-      const t = `${a.titulo || ''} ${a.texto || ''}`;
-      await db.run('UPDATE anuncios SET idioma = ?, texto_hash = ? WHERE ad_id = ?', [idiomaDe(t), hashTexto(a.texto) || 'x', a.ad_id]);
-    }
-  });
+  await atualizarLote('anuncios', 'ad_id', [['idioma', 'text'], ['texto_hash', 'text']],
+    lista.map((a) => [a.ad_id, idiomaDe(`${a.titulo || ''} ${a.texto || ''}`), hashTexto(a.texto) || 'x']));
   return lista.length;
 }
 
@@ -93,10 +87,10 @@ export async function classificarAnunciantes({ log = () => {} } = {}) {
     const idiomas = {};
     for (const a of lista) if (a.idioma) idiomas[a.idioma] = (idiomas[a.idioma] || 0) + 1;
     const idioma = Object.entries(idiomas).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
-    atualizacoes.push([r.tipo, r.motivo, idioma, t, p.page_id]);
+    atualizacoes.push([p.page_id, r.tipo, r.motivo, idioma, t]);
     cont[r.tipo] = (cont[r.tipo] || 0) + 1;
   }
-  await tx(async (db) => { for (const u of atualizacoes) await db.run('UPDATE paginas SET tipo = ?, tipo_motivo = ?, idioma = ?, classificado = ? WHERE page_id = ?', u); });
+  await atualizarLote('paginas', 'page_id', [['tipo', 'text'], ['tipo_motivo', 'text'], ['idioma', 'text'], ['classificado', 'bigint']], atualizacoes);
   log(`  classificação: ${Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   return cont;
 }
@@ -153,13 +147,23 @@ export async function montarOfertas({ log = () => {} } = {}) {
         Math.min(...g.ads.map((a) => a.inicio || Infinity).filter(Number.isFinite)) || null, thumb, agora()],
     });
   }
+  // Reconstrói tudo numa transação, com inserções em lote (na nuvem, uma por linha levava minutos).
+  const COLS = ['chave', 'tipo_chave', 'pais', 'gateway', 'produto', 'preco', 'preco_brl', 'tipo', 'idioma', 'paginas', 'dominios', 'anuncios', 'ativos_paginas', 'inicio', 'thumb', 'atualizado'];
+  const marcas = (n, k) => Array.from({ length: n }, () => '(' + Array(k).fill('?').join(', ') + ')').join(', ');
   await tx(async (db) => {
     await db.run('DELETE FROM oferta_membros');
     await db.run('DELETE FROM ofertas');
-    for (const l of linhas) {
-      const r = await db.get(`INSERT INTO ofertas (chave, tipo_chave, pais, gateway, produto, preco, preco_brl, tipo, idioma, paginas, dominios, anuncios, ativos_paginas, inicio, thumb, atualizado)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`, l.valores.map((v) => (v === Infinity ? null : v)));
-      for (const m of l.g.membros) await db.run('INSERT INTO oferta_membros (oferta_id, page_id, dominio) VALUES (?, ?, ?) ON CONFLICT DO NOTHING', [r.id, m.page_id, m.dominio]);
+    const ids = new Map();
+    for (let i = 0; i < linhas.length; i += 200) {
+      const lote = linhas.slice(i, i + 200);
+      const r = await db.all(`INSERT INTO ofertas (${COLS.join(', ')}) VALUES ${marcas(lote.length, COLS.length)} RETURNING id, chave`,
+        lote.flatMap((l) => l.valores.map((v) => (v === Infinity ? null : v))));
+      for (const x of r) ids.set(x.chave, x.id);
+    }
+    const membros = linhas.flatMap((l) => l.g.membros.map((m) => [ids.get(l.g.chave), m.page_id, m.dominio ?? null]));
+    for (let i = 0; i < membros.length; i += 400) {
+      const lote = membros.slice(i, i + 400);
+      await db.run(`INSERT INTO oferta_membros (oferta_id, page_id, dominio) VALUES ${marcas(lote.length, 3)} ON CONFLICT DO NOTHING`, lote.flat());
     }
   });
   const multi = linhas.filter((l) => l.g.membros.length > 1).length;

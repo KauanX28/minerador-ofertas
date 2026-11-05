@@ -124,11 +124,16 @@ async function checarCloaker(url, vistaCelular) {
 // Enriquecimento: todo anunciante com N+ anúncios ativos tem o site analisado (gateway, preço, funil, cloaker).
 async function enriquecerDominios(ctx, o, { limite = 6, minAnuncios = 8 } = {}) {
   const dias14 = agora() - 14 * 86400;
+  // Só anunciantes que podem ser oferta para modelar: marcas, apps, físico e negócio local ficam de fora (e a lista de bloqueio).
   const candidatos = await all(`SELECT a.dominio, COUNT(*) n FROM anuncios a
     JOIN (SELECT page_id, MAX(ativos) m FROM historico_diario WHERE pais = ? GROUP BY page_id) h ON h.page_id = a.page_id
-    WHERE a.ativo = 1 AND a.pais = ? AND a.dominio IS NOT NULL AND h.m >= ? GROUP BY a.dominio ORDER BY COUNT(*) DESC LIMIT 60`, [o.pais, o.pais, minAnuncios]);
+    JOIN paginas p ON p.page_id = a.page_id
+    WHERE a.ativo = 1 AND a.pais = ? AND a.dominio IS NOT NULL AND h.m >= ? AND COALESCE(p.tipo, 'indefinido') NOT IN ('marca', 'app', 'fisico', 'local')
+    GROUP BY a.dominio ORDER BY COUNT(*) DESC LIMIT 60`, [o.pais, o.pais, minAnuncios]);
+  const bloqueio = ((await lerConfig()).bloqueio || []).map((b) => b.toLowerCase().replace(/\s+/g, ''));
+  const bloqueado = (d) => bloqueio.some((b) => d.toLowerCase().replace(/[^a-z0-9]/g, '').includes(b.replace(/[^a-z0-9]/g, '')));
   const feitos = new Set((await all('SELECT dominio FROM analises WHERE quando > ?', [dias14])).map((r) => r.dominio));
-  const fila = candidatos.map((c) => c.dominio.split('/')[0]).filter((d, i, arr) => arr.indexOf(d) === i && !feitos.has(d) && !feitos.has(raizDominio(d)) && !detectarGateway('https://' + d + '/x'));
+  const fila = candidatos.map((c) => c.dominio.split('/')[0]).filter((d, i, arr) => arr.indexOf(d) === i && !bloqueado(d) && !feitos.has(d) && !feitos.has(raizDominio(d)) && !detectarGateway('https://' + d + '/x'));
   const vez = fila.slice(0, limite);
   if (vez.length) log(`> Analisando ${vez.length} sites de anunciantes com ${minAnuncios}+ anúncios (de ${fila.length} pendentes)`);
   for (const d of vez) {

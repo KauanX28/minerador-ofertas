@@ -76,6 +76,38 @@ if (usaPostgres) {
 
 export const { all, get, run, tx, fechar } = impl;
 
+// Atualiza muitas linhas de uma vez. No Postgres da nuvem cada comando é uma viagem de rede (~100 ms),
+// então 5.000 UPDATEs viravam 10 minutos; em lote são poucos comandos. colunas: [['nome', 'tipo SQL'], ...];
+// linhas: [[chave, valor1, valor2, ...], ...].
+export async function atualizarLote(tabela, chave, colunas, linhas, tamanho = 400) {
+  if (!linhas.length) return;
+  if (!usaPostgres) {
+    const q = `UPDATE ${tabela} SET ${colunas.map(([c]) => `${c} = ?`).join(', ')} WHERE ${chave} = ?`;
+    await tx(async (db) => { for (const [k, ...v] of linhas) await db.run(q, [...v, k]); });
+    return;
+  }
+  for (let i = 0; i < linhas.length; i += tamanho) {
+    const lote = linhas.slice(i, i + tamanho);
+    const n = colunas.length + 1;
+    const valores = lote.map((_, j) => '(' + Array.from({ length: n }, (__, k) => '?').join(', ') + ')').join(', ');
+    const nomes = ['k', ...colunas.map(([c]) => c)].join(', ');
+    await run(`UPDATE ${tabela} AS t SET ${colunas.map(([c, tipo]) => `${c} = v.${c}::${tipo}`).join(', ')}
+      FROM (VALUES ${valores}) AS v(${nomes}) WHERE t.${chave} = v.k::text`, lote.flat().map((x) => (x === undefined ? null : x == null ? null : String(x))));
+  }
+}
+
+// Insere muitas linhas de uma vez (mesma ideia). Retorna as linhas de RETURNING, se pedido.
+export async function inserirLote(tabela, colunas, linhas, { conflito = '', retornar = '', tamanho = 300 } = {}) {
+  const saida = [];
+  for (let i = 0; i < linhas.length; i += tamanho) {
+    const lote = linhas.slice(i, i + tamanho);
+    const valores = lote.map(() => '(' + colunas.map(() => '?').join(', ') + ')').join(', ');
+    const q = `INSERT INTO ${tabela} (${colunas.join(', ')}) VALUES ${valores} ${conflito}${retornar ? ' RETURNING ' + retornar : ''}`;
+    if (retornar) saida.push(...(await all(q, lote.flat()))); else await run(q, lote.flat());
+  }
+  return saida;
+}
+
 // Aplica as migrações pendentes, em ordem, registrando cada uma em schema_migracoes.
 export async function migrar({ log = () => {} } = {}) {
   const { ddl, existe, colunas } = impl;

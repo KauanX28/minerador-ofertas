@@ -4,5 +4,5 @@
   "installCommand": "npm install --omit=optional --ignore-scripts",
   "outputDirectory": "painel",
   "rewrites": [{ "source": "/api/(.*)", "destination": "/api" }, { "source": "/((?!api/).*)", "destination": "/index.html" }],
-  "functions": { "api/index.js": { "maxDuration": 30 } }
+  "functions": { "api/index.js": { "maxDuration": 60 } }
 }
