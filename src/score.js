@@ -10,20 +10,69 @@ const clamp = (x) => Math.max(0, Math.min(1, x));
 const nomeGateway = (id) => GATEWAYS.find((g) => g.id === id)?.nome || id;
 const diasAtras = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
 
-export function classificar({ ativos, dias, crescimentoPct }) {
-  if (ativos >= 50) return 'Escalada forte';
-  if (crescimentoPct >= 50 && ativos >= 10) return 'Escalando agora';
-  if (ativos >= 20 && dias >= 21) return 'Escalada';
-  if (ativos >= 8) return 'Validando';
-  return 'Teste';
+// ---------- Score v2 (Fase 2) ----------
+// O que mais indica uma oferta escalando não é o total de anúncios, e sim o ritmo: quantos anúncios entram por semana,
+// se a contagem sobe, se o criativo campeão está há semanas no ar e se o produtor já abriu várias contas no mesmo checkout.
+export const PESOS = { velocidade: 25, volume: 15, contas: 15, novos: 15, consistencia: 15, campeao: 15 };
+const pct = (v, total) => (v == null || total - v <= 0 ? null : v / (total - v)); // variação relativa ao valor anterior
+
+// Recebe as métricas do anunciante e devolve nota (0–100), status, oportunidade de modelagem e a explicação de cada fator.
+export function avaliar({ ativos = 0, dias = 0, dupMax = 1, crescimentoPct = null, var7 = null, var14 = null, var30 = null,
+  contasCheckout = 1, contasMesmoCriativo = 1, novos7 = null, diasConsistentes = null, idadeCampeao = null } = {}) {
+  const g7 = pct(var7, ativos), g14 = pct(var14, ativos), g30 = pct(var30, ativos);
+  const gAnt = crescimentoPct == null ? null : crescimentoPct / 100;
+  const temHistorico = [g7, g14, g30, gAnt].some((x) => x != null);
+  // 50% em 7 dias, 80% em 14 ou dobrar em 30 já é velocidade máxima.
+  const vel = temHistorico ? clamp(Math.max(g7 == null ? -1 : g7 / 0.5, g14 == null ? -1 : g14 / 0.8, g30 == null ? -1 : g30 / 1, gAnt == null ? -1 : gAnt / 0.5)) : 0;
+  const fatores = [
+    { chave: 'velocidade', nome: 'Velocidade', nota: vel,
+      detalhe: !temHistorico ? 'só uma contagem até agora; aparece a partir da próxima recontagem'
+        : [var7 != null && `${var7 >= 0 ? '+' : ''}${var7} em 7 dias`, var14 != null && `${var14 >= 0 ? '+' : ''}${var14} em 14`, var30 != null && `${var30 >= 0 ? '+' : ''}${var30} em 30`,
+          var7 == null && var14 == null && var30 == null && gAnt != null && `${crescimentoPct >= 0 ? '+' : ''}${crescimentoPct}% desde a contagem anterior`].filter(Boolean).join(' · ') },
+    { chave: 'volume', nome: 'Anúncios ativos', nota: clamp(Math.log10(ativos + 1) / Math.log10(101)), detalhe: `${ativos} anúncios ativos (100+ é nota máxima)` },
+    { chave: 'contas', nome: 'Contas no mesmo checkout', nota: clamp(Math.log2(Math.max(1, contasCheckout)) / Math.log2(6)),
+      detalhe: contasCheckout > 1 ? `${contasCheckout} páginas vendem o mesmo checkout/site` : 'uma página só vendendo este checkout' },
+    { chave: 'novos', nome: 'Criativos novos na semana', nota: novos7 == null ? 0 : clamp(novos7 / 10), detalhe: novos7 == null ? 'sem dados' : `${novos7} anúncios começaram nos últimos 7 dias` },
+    { chave: 'consistencia', nome: 'Consistência', nota: diasConsistentes != null ? clamp(diasConsistentes / 21) : clamp(dias / 45) * 0.7,
+      detalhe: diasConsistentes != null ? `${diasConsistentes} dias seguidos com 10+ anúncios ativos` : `anúncio mais antigo ainda ativo há ${dias} dias` },
+    { chave: 'campeao', nome: 'Criativo campeão', nota: clamp(Math.log2(dupMax + 1) / Math.log2(21)) * (idadeCampeao == null ? 0.6 : 0.4 + 0.6 * clamp(idadeCampeao / 30)),
+      detalhe: `criativo mais duplicado em ${dupMax} anúncio${dupMax > 1 ? 's' : ''}${idadeCampeao != null ? `, no ar há ${idadeCampeao} dias` : ''}` },
+  ];
+  for (const f of fatores) { f.peso = PESOS[f.chave]; f.pontos = Math.round(f.nota * f.peso * 10) / 10; }
+  const score = Math.round(fatores.reduce((t, f) => t + f.nota * f.peso, 0));
+
+  const caindo = (g7 != null && g7 <= -0.3) || (g14 != null && g14 <= -0.4) || (!g7 && !g14 && gAnt != null && gAnt <= -0.3 && ativos < 50);
+  const acelerando = (g7 != null && g7 >= 0.3) || (g14 != null && g14 >= 0.5) || (gAnt != null && gAnt >= 0.5);
+  let status;
+  if (caindo && ativos >= 3) status = 'Saturando/caindo';
+  else if (dias <= 7 && ativos >= 8 && (acelerando || (novos7 ?? 0) >= 5)) status = 'Nova acelerando';
+  else if (ativos >= 50) status = 'Escalada forte';
+  else if (acelerando && ativos >= 10) status = 'Escalando agora';
+  else if (ativos >= 20 && dias >= 21) status = 'Escalada';
+  else if (ativos >= 8) status = 'Validando';
+  else status = 'Teste';
+
+  // Oportunidade de modelagem: escalada, mas com poucas contas de fora usando o mesmo criativo/estrutura.
+  const concorrentes = Math.max(0, contasMesmoCriativo - contasCheckout);
+  const fatorConc = Math.max(0.2, 1 - 0.15 * concorrentes);
+  const oportunidade = Math.round(score * fatorConc * (status === 'Saturando/caindo' ? 0.5 : 1));
+  const motivoOport = status === 'Saturando/caindo' ? 'oferta caindo: metade da nota'
+    : concorrentes ? `${concorrentes} outra${concorrentes > 1 ? 's' : ''} conta${concorrentes > 1 ? 's' : ''} já usa${concorrentes > 1 ? 'm' : ''} o mesmo criativo`
+      : 'ninguém mais usa o mesmo criativo';
+  return { score, status, oportunidade, motivoOport, fatores };
 }
 
-export function pontuar({ ativos, dias, dupMax, crescimentoPct }) {
-  const sA = clamp(Math.log10(ativos + 1) / Math.log10(101));      // 100 anúncios ativos = nota máxima
-  const sD = clamp(dias / 45);                                      // 45+ dias rodando = máxima
-  const sDup = clamp(Math.log2(dupMax + 1) / Math.log2(21));        // criativo em 20+ anúncios = máxima
-  const sG = clamp((crescimentoPct ?? 0) / 100);                    // dobrou de tamanho = máxima
-  return Math.round(100 * (0.55 * sA + 0.2 * sD + 0.1 * sDup + 0.15 * sG));
+// Compatibilidade: telas que só têm números agregados (sites, checkouts).
+export const pontuar = (m) => avaliar(m).score;
+export const classificar = (m) => avaliar(m).status;
+
+// Dias seguidos (a partir da contagem mais recente) com pelo menos `limiar` anúncios ativos.
+function diasSeguidos(serie, limiar = 10) {
+  if (!serie?.length || serie.length < 2) return null;
+  let inicio = null;
+  for (let i = serie.length - 1; i >= 0; i--) { if (serie[i].ativos >= limiar) inicio = serie[i].data; else break; }
+  if (!inicio) return 0;
+  return Math.round((Date.parse(serie.at(-1).data) - Date.parse(inicio)) / 864e5) + 1;
 }
 
 async function favoritosSet(tipo) {
@@ -51,7 +100,7 @@ export async function paisesComDados() {
 // Filtros da Fase 1: tipo de oferta (padrão: só low ticket), preço máximo em reais, idioma e anunciantes bloqueados.
 export async function rankingPaginas({ pais = 'BR', nicho = '', min = 0, busca = '', minDias = 0, gateway = '', tipo = '', precoMax = 0, semPreco = true, idioma = '' } = {}) {
   const agora = Date.now() / 1000;
-  const [paginas, ult, ant, ads, analises, favs, hist30, cks, mesmoCriativo, mesmoTexto] = await Promise.all([
+  const [paginas, ult, ant, ads, analises, favs, hist30, cks, mesmoCriativo, mesmoTexto, contasOferta] = await Promise.all([
     all('SELECT * FROM paginas'),
     all(SQL_ULTIMO, ['9999-12-31', pais, pais]),
     all(SQL_ULTIMO, [diasAtras(5), pais, pais]),
@@ -63,7 +112,9 @@ export async function rankingPaginas({ pais = 'BR', nicho = '', min = 0, busca =
     all('SELECT checkout, preco_brl, produto, preco FROM checkouts'),
     all(`SELECT phash, COUNT(DISTINCT page_id) n FROM anuncios WHERE ativo = 1 AND pais = ? AND phash IS NOT NULL GROUP BY phash HAVING COUNT(DISTINCT page_id) > 1`, [pais]),
     all(`SELECT texto_hash, COUNT(DISTINCT page_id) n FROM anuncios WHERE ativo = 1 AND pais = ? AND texto_hash IS NOT NULL AND texto_hash <> 'x' GROUP BY texto_hash HAVING COUNT(DISTINCT page_id) > 1`, [pais]),
+    all('SELECT m.page_id, MAX(o.paginas) n, MAX(o.id) oferta_id FROM oferta_membros m JOIN ofertas o ON o.id = m.oferta_id WHERE o.pais = ? GROUP BY m.page_id', [pais]),
   ]);
+  const contasCk = new Map(contasOferta.map((r) => [r.page_id, r]));
   const ultimo = new Map(ult.map((r) => [r.page_id, r]));
   const serie = new Map();
   for (const h of hist30) { if (!serie.has(h.page_id)) serie.set(h.page_id, []); serie.get(h.page_id).push(h); }
@@ -125,8 +176,13 @@ export async function rankingPaginas({ pais = 'BR', nicho = '', min = 0, busca =
     if (precoMax && (precoBrl == null ? !semPreco : precoBrl > precoMax)) continue;
     const contasMesmoCriativo = lista.reduce((m, a) => Math.max(m, (a.phash && phashContas.get(a.phash)) || 1, (a.texto_hash && textoContas.get(a.texto_hash)) || 1), 1);
     const top = lista[0] || {};
-    const m = { ativos, dias, dupMax, crescimentoPct };
     if (!h && !lista.length) continue;
+    const var7 = variacao(p.page_id, ativos, 7), var14 = variacao(p.page_id, ativos, 14), var30 = variacao(p.page_id, ativos, 30);
+    const novos7 = lista.filter((a) => a.inicio && agora - a.inicio <= 7 * DIA).length;
+    const idadeCampeao = top.inicio ? Math.floor((agora - top.inicio) / DIA) : null;
+    const contasCheckout = Number(contasCk.get(p.page_id)?.n || 1);
+    const av = avaliar({ ativos, dias, dupMax, crescimentoPct, var7, var14, var30, contasCheckout, contasMesmoCriativo,
+      novos7, diasConsistentes: diasSeguidos(serie.get(p.page_id)), idadeCampeao });
     saida.push({
       page_id: p.page_id, pais, nome: p.nome, uri: p.uri, foto: p.foto, curtidas: p.curtidas,
       categorias: p.categorias, nichos, palavras: JSON.parse(p.palavras || '[]'),
@@ -134,10 +190,10 @@ export async function rankingPaginas({ pais = 'BR', nicho = '', min = 0, busca =
       crescimento, crescimentoPct, dias, dupMax, criativosNoBanco: lista.length,
       dominios: listaDom, gateways: [...gws].map(nomeGateway), preco, precoBrl, precoOrigem, produto, funil: formatoFunil,
       tipo: p.tipo || 'indefinido', tipoMotivo: p.tipo_motivo || '', idioma: p.idioma || null, contasMesmoCriativo,
-      var7: variacao(p.page_id, ativos, 7), var14: variacao(p.page_id, ativos, 14), var30: variacao(p.page_id, ativos, 30),
+      var7, var14, var30, novos7, contasCheckout, ofertaId: contasCk.get(p.page_id)?.oferta_id || null,
       thumb: top.thumb || null, titulo: top.titulo || '', texto: top.texto || '',
       favorito: favs.has(p.page_id),
-      score: pontuar(m), status: classificar({ ...m, crescimentoPct: crescimentoPct ?? 0 }),
+      score: av.score, status: av.status, oportunidade: av.oportunidade, motivoOport: av.motivoOport, fatores: av.fatores,
     });
   }
   return saida.sort((a, b) => b.score - a.score || b.ativos - a.ativos);
@@ -158,8 +214,9 @@ export async function rankingDominios({ pais = 'BR', nicho = '' } = {}) {
   for (const r of rows) {
     const p = porPagina.get(r.page_id);
     if (!p) continue;
-    const d = mapa.get(r.dominio) || { dominio: r.dominio, link: r.link, thumb: r.thumb, paginas: [], ativos: 0, dias: 0, dupMax: 0 };
+    const d = mapa.get(r.dominio) || { dominio: r.dominio, link: r.link, thumb: r.thumb, paginas: [], ativos: 0, dias: 0, dupMax: 0, melhor: null };
     d.paginas.push({ page_id: p.page_id, nome: p.nome, ativos: p.ativos });
+    if (!d.melhor || p.score > d.melhor.score) d.melhor = p;
     d.ativos += p.ativos;
     d.dias = Math.max(d.dias, r.inicio ? Math.floor((agora - r.inicio) / DIA) : 0);
     d.dupMax = Math.max(d.dupMax, r.dup || 1);
@@ -172,7 +229,7 @@ export async function rankingDominios({ pais = 'BR', nicho = '' } = {}) {
       gateways: an?.gateways || [], preco: an?.checkouts?.[0]?.preco || an?.precos?.[0] || null,
       produto: an?.checkouts?.[0]?.produto || null, titulo: an?.titulo || null, analisado: !!an,
       funil: an ? (an.tecnologia?.quiz?.length ? 'Quiz' : an.tecnologia?.vsl?.length ? 'VSL' : 'Página') : (/\//.test(d.dominio) ? 'Direto p/ checkout' : null),
-      score: pontuar({ ...d, crescimentoPct: 0 }), status: classificar({ ...d, crescimentoPct: 0 }),
+      score: d.melhor?.score ?? pontuar(d), status: d.melhor?.status ?? classificar(d), oportunidade: d.melhor?.oportunidade ?? null, melhor: undefined,
     };
   }).sort((a, b) => b.ativos - a.ativos);
 }
@@ -181,7 +238,7 @@ export async function rankingDominios({ pais = 'BR', nicho = '' } = {}) {
 export async function rankingGateway(id, pais = 'BR') {
   const agora = Date.now() / 1000;
   const [rows, cks, pags, hist, favs, analises, buscas] = await Promise.all([
-    all(`SELECT checkout, COUNT(*) anuncios, SUM(dup) variacoes, MIN(inicio) inicio, MAX(CASE WHEN thumb_arquivo IS NOT NULL THEN '/api/midia/' || ad_id ELSE thumb END) thumb,
+    all(`SELECT checkout, COUNT(*) anuncios, SUM(dup) variacoes, MAX(dup) dupmax, MIN(inicio) inicio, MAX(CASE WHEN thumb_arquivo IS NOT NULL THEN '/api/midia/' || ad_id ELSE thumb END) thumb,
            MAX(link) link, GROUP_CONCAT(DISTINCT page_id) paginas FROM anuncios
          WHERE gateway = ? AND pais = ? AND ativo = 1 AND checkout IS NOT NULL GROUP BY checkout ORDER BY SUM(dup) DESC, COUNT(*) DESC LIMIT 200`, [id, pais]),
     all('SELECT * FROM checkouts WHERE gateway = ?', [id]),
@@ -207,7 +264,7 @@ export async function rankingGateway(id, pais = 'BR') {
         .map((pid) => ({ page_id: pid, nome: nome.get(pid) || pid, ativos: ativos.get(pid) ?? null }))
         .sort((a, b) => (b.ativos ?? 0) - (a.ativos ?? 0)),
       thumb: r.thumb, titulo: t.titulo || '', texto: t.texto || '', favorito: favs.has(r.checkout),
-      score: pontuar({ ativos: r.variacoes, dias, dupMax: 1, crescimentoPct: 0 }),
+      score: pontuar({ ativos: r.variacoes, dias, dupMax: r.dupmax || 1, contasCheckout: String(r.paginas || '').split(',').filter(Boolean).length }),
     };
   });
   const paginasVendas = [...analises.entries()].map(([dominio, a]) => ({ dominio, ...a }))
@@ -258,7 +315,7 @@ export async function listaAnalises() {
 export async function painelGeral(pais = 'BR') {
   const agora = Math.floor(Date.now() / 1000);
   const [pags, nAds, ult, n7, gws, nAn, nFav] = await Promise.all([
-    rankingPaginas({ pais }),
+    rankingPaginas({ pais, tipo: 'low' }), // a tela inicial mostra só low ticket
     get('SELECT COUNT(*) n FROM anuncios WHERE ativo = 1 AND pais = ?', [pais]),
     get('SELECT MAX(quando) q FROM buscas WHERE pais = ?', [pais]),
     get('SELECT COUNT(*) n FROM buscas WHERE quando > ? AND pais = ?', [agora - 7 * DIA, pais]),
@@ -269,9 +326,10 @@ export async function painelGeral(pais = 'BR') {
   return {
     paginas: pags.length, anuncios: nAds.n,
     escaladas: pags.filter((p) => ['Escalada forte', 'Escalada'].includes(p.status)).length,
-    escalandoAgora: pags.filter((p) => p.status === 'Escalando agora').slice(0, 6),
+    escalandoAgora: pags.filter((p) => ['Nova acelerando', 'Escalando agora'].includes(p.status)).slice(0, 6),
     top: pags.slice(0, 6),
-    novas: pags.filter((p) => p.dias > 0 && p.dias <= 14 && p.ativos >= 10).slice(0, 6),
+    novas: pags.filter((p) => p.dias > 0 && p.dias <= 14 && p.ativos >= 10).sort((a, b) => (b.status === 'Nova acelerando') - (a.status === 'Nova acelerando')).slice(0, 6),
+    oportunidades: [...pags].filter((p) => p.status !== 'Teste').sort((a, b) => b.oportunidade - a.oportunidade).slice(0, 6),
     ultimaBusca: ult.q, buscas7d: n7.n,
     gateways: gws.filter((g) => g.anuncios > 0).slice(0, 8),
     analises: nAn.n, favoritos: nFav.n, hoje: hoje(),

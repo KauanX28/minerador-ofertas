@@ -99,6 +99,11 @@ label.campo { display: flex; flex-direction: column; gap: 4px; font-size: 12px; 
 .st-escalada { color: var(--aviso); background: var(--aviso-s); border-color: transparent; } .st-escalada::before { background: var(--aviso); }
 .st-agora { color: var(--pri); background: var(--pri-s); border-color: transparent; } .st-agora::before { background: var(--pri); }
 .st-validando { color: var(--ok); background: var(--ok-s); border-color: transparent; } .st-validando::before { background: var(--ok); }
+.st-nova { color: #fff; background: var(--pri); border-color: transparent; } .st-nova::before { background: #fff; }
+.st-caindo { color: var(--mut); background: var(--sup2); border-color: transparent; text-decoration: line-through; text-decoration-thickness: 1px; } .st-caindo::before { background: var(--mut); }
+.fatores { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 18px; }
+.fator i { display: block; height: 5px; margin: 5px 0 4px; border-radius: 3px; background: var(--sup2); overflow: hidden; } .fator i span { display: block; height: 100%; background: var(--pri); }
+.fator-cab { display: flex; justify-content: space-between; font-size: 13px; } .fator small { font-size: 12px; line-height: 1.35; display: block; }
 .tg-gw { color: var(--roxo); background: var(--roxo-s); border-color: transparent; } .tg-gw::before { display: none; }
 .preco { font-weight: 600; color: var(--ok); }
 .cresce { color: var(--ok); } .cai { color: var(--erro); }

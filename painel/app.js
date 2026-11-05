@@ -54,7 +54,7 @@ let PAISES_COM_DADOS = [];
 let CONFIG = null;
 const opcoesPais = (sel = PAIS) => PAISES.map(([c, n]) => `<option value="${c}" ${c === sel ? 'selected' : ''}>${c} · ${n}</option>`).join('');
 
-const STATUS = { 'Escalada forte': 'st-forte', 'Escalada': 'st-escalada', 'Escalando agora': 'st-agora', 'Validando': 'st-validando', 'Teste': '' };
+const STATUS = { 'Nova acelerando': 'st-nova', 'Escalada forte': 'st-forte', 'Escalada': 'st-escalada', 'Escalando agora': 'st-agora', 'Validando': 'st-validando', 'Saturando/caindo': 'st-caindo', 'Teste': '' };
 const bib = {
   pagina: (id) => `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${PAIS}&view_all_page_id=${id}&search_type=page&media_type=all`,
   busca: (q) => `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${PAIS}&q=${encodeURIComponent(q)}&search_type=keyword_unordered&media_type=all`,
@@ -147,7 +147,15 @@ function ligarOrdenacao(el, estado, redesenhar) {
 
 const tagStatus = (s) => `<span class="tag ${STATUS[s] || ''}">${esc(s)}</span>`;
 const tagsGw = (gws) => (gws || []).map((g) => `<span class="tag tg-gw">${esc(g)}</span>`).join(' ');
-const barraScore = (n) => `<div class="score"><b>${n}</b><i><span style="width:${Math.min(100, n)}%"></span></i></div>`;
+const explicarScore = (fatores) => (fatores || []).map((f) => `${f.nome}: ${f.pontos} de ${f.peso} (${f.detalhe})`).join('\n');
+const barraScore = (n, fatores) => `<div class="score" title="${esc(fatores ? 'Como a nota foi calculada:\n' + explicarScore(fatores) : '')}"><b>${n}</b><i><span style="width:${Math.min(100, n)}%"></span></i></div>`;
+// Bloco "Por que essa nota" na página do anunciante.
+const blocoScore = (p) => !p.fatores ? '' : `
+  <div class="painel-box" style="margin-bottom:14px"><div class="pb-cab"><h2>Por que essa nota</h2><span class="mut peq">score ${p.score} · oportunidade de modelagem ${p.oportunidade}</span></div>
+    <div class="pb-corpo fatores">${p.fatores.map((f) => `
+      <div class="fator"><div class="fator-cab"><span>${esc(f.nome)}</span><b class="num">${f.pontos}<span class="mut">/${f.peso}</span></b></div>
+        <i><span style="width:${Math.round(100 * f.nota)}%"></span></i><small class="mut">${esc(f.detalhe)}</small></div>`).join('')}
+      <p class="peq mut" style="margin:4px 0 0;grid-column:1/-1">Oportunidade: ${esc(p.motivoOport || '')}. Quanto menos contas usando a mesma estrutura, mais espaço para modelar.</p></div></div>`;
 const cresc = (p) => (p.crescimento == null ? '<span class="mut">—</span>'
   : `<span class="${p.crescimento >= 0 ? 'cresce' : 'cai'}">${p.crescimento >= 0 ? '+' : ''}${p.crescimento}${p.crescimentoPct != null ? ` (${p.crescimentoPct}%)` : ''}</span>`);
 const entidade = (img, t1, t2) => `<div class="ent">${img ? `<img src="${esc(img)}" loading="lazy">` : '<div class="av"></div>'}<div><div class="t1" title="${esc(t1)}">${esc(t1)}</div>${t2 ? `<div class="t2" title="${esc(t2)}">${esc(t2)}</div>` : ''}</div></div>`;
@@ -230,8 +238,9 @@ async function abrirPagina(id) {
       <div class="kpi"><span>Anúncios ativos</span><b>${fmt(p.ativos)}</b><small>${p.dataContagem ? 'contados em ' + p.dataContagem : 'estimado'}</small></div>
       <div class="kpi"><span>Crescimento</span><b>${p.crescimento == null ? '—' : cresc(p)}</b><small>vs. contagem anterior</small></div>
       <div class="kpi"><span>Dias rodando</span><b>${p.dias ?? '—'}</b><small>anúncio ativo mais antigo</small></div>
-      <div class="kpi"><span>Score</span><b>${p.score ?? '—'}</b><small>${fmt(p.curtidas)} curtidas na página</small></div>
+      <div class="kpi"><span>Score</span><b>${p.score ?? '—'}</b><small>oportunidade ${p.oportunidade ?? '—'}</small></div>
     </div>
+    ${blocoScore(p)}
     <div class="linha" style="margin-bottom:12px">
       <a class="bt-p" href="${bib.pagina(id)}" target="_blank">${ic('externo')} Abrir na Biblioteca</a>
       ${(p.dominios || []).map((dm) => `<button class="bt-p" onclick='abrirDominio(${js(dm.split('/')[0])})'>${ic('dominio')} ${esc(dm)}</button>`).join('')}
@@ -341,35 +350,39 @@ const colsAnunciantes = (comNicho) => [
   ['Preço', (p) => celPreco(p.preco, p.precoBrl, p.precoOrigem), 'precoBrl'],
   ['Funil', (p) => esc(p.funil || '—')],
 
-  ['Score', (p) => barraScore(p.score), 'score'],
+  ['Score', (p) => barraScore(p.score, p.fatores), 'score'],
+  ['Oportunidade', (p) => `<span class="num" title="${esc(p.motivoOport || '')}">${p.oportunidade ?? '—'}</span>`, 'oportunidade', 'dir'],
   ['', (p) => `${btEstrela('pagina', p.page_id, p.nome, p.favorito)}<a class="bt-ic" href="${bib.pagina(p.page_id)}" target="_blank" title="Abrir na Biblioteca">${ic('externo')}</a>`, null, 'acoes'],
 ];
 const csvAnunciantes = [['Anunciante', (p) => p.nome], ['País', () => PAIS], ['Status', (p) => p.status], ['Anúncios ativos', (p) => p.ativos], ['Crescimento', (p) => p.crescimento],
   ['Dias', (p) => p.dias], ['Variações', (p) => p.dupMax], ['Gateways', (p) => (p.gateways || []).join(', ')], ['Preço', (p) => p.preco], ['Produto', (p) => p.produto],
-  ['Funil', (p) => p.funil], ['Site', (p) => p.dominios?.[0]], ['Nichos', (p) => (p.nichos || []).join(', ')], ['Score', (p) => p.score], ['Biblioteca', (p) => bib.pagina(p.page_id)]];
+  ['Funil', (p) => p.funil], ['Site', (p) => p.dominios?.[0]], ['Nichos', (p) => (p.nichos || []).join(', ')], ['Score', (p) => p.score], ['Oportunidade', (p) => p.oportunidade],
+  ['Var. 7 dias', (p) => p.var7], ['Var. 30 dias', (p) => p.var30], ['Criativos novos (7d)', (p) => p.novos7], ['Biblioteca', (p) => bib.pagina(p.page_id)]];
 
 TELAS.inicio = async (el) => {
   const d = await api('/api/painel');
   const est = {};
   const c = colsAnunciantes();
-  const mini = (id, lista) => `<div class="painel-box rolar">${tabela(id, lista, [c[1], c[3], c[4], c[5], c[10]], est)}</div>`;
+  const mini = (id, lista) => `<div class="painel-box rolar">${tabela(id, lista, [c[1], c[3], c[4], c[5], c.find((x) => x[0] === 'Score')], est)}</div>`;
   el.innerHTML = `
   <div class="cab"><div><h1>Painel</h1><p>${esc(nomePais(PAIS))} · ofertas e anunciantes mapeados na Biblioteca de Anúncios</p></div>
     <div class="linha"><button onclick="rodarTarefa({tipo:'atualizar'})">${ic('atualizar')} Atualizar contagens</button><button class="pri" onclick="location.hash='#/minerar'">Nova mineração</button></div></div>
   <div class="kpis">
     <div class="kpi"><span>Anunciantes</span><b>${fmt(d.paginas)}</b><small>${fmt(d.escaladas)} escalados</small></div>
     <div class="kpi"><span>Anúncios ativos salvos</span><b>${fmt(d.anuncios)}</b></div>
-    <div class="kpi"><span>Escalando agora</span><b>${fmt(d.escalandoAgora.length)}</b><small>+50% desde a contagem anterior</small></div>
+    <div class="kpi"><span>Escalando agora</span><b>${fmt(d.escalandoAgora.length)}</b><small>novas acelerando ou crescendo rápido</small></div>
     <div class="kpi"><span>Domínios analisados</span><b>${fmt(d.analises)}</b></div>
     <div class="kpi"><span>Última coleta</span><b style="font-size:16px">${quando(d.ultimaBusca)}</b><small>${d.buscas7d} buscas em 7 dias</small></div>
   </div>
   ${d.paginas ? `
   <div class="grade-2 secao">
     <div><div class="secao-cab"><h2>Mais escaladas</h2><a href="#/ofertas" class="peq">Ver ranking completo</a></div>${mini('tbTop', d.top)}</div>
-    <div><div class="secao-cab"><h2>Escalando agora</h2><span class="mut peq">cresceram 50%+ entre contagens</span></div>
+    <div><div class="secao-cab"><h2>Escalando agora</h2><span class="mut peq">novas acelerando e crescimento forte entre contagens</span></div>
       ${d.escalandoAgora.length ? mini('tbAgora', d.escalandoAgora) : '<div class="painel-box vazio">Rode "Atualizar contagens" em dias diferentes para medir crescimento.</div>'}</div>
     <div><div class="secao-cab"><h2>Novas e fortes</h2><span class="mut peq">até 14 dias e 10+ anúncios</span></div>
       ${d.novas.length ? mini('tbNovas', d.novas) : '<div class="painel-box vazio">Nenhuma oferta nova forte ainda.</div>'}</div>
+    <div><div class="secao-cab"><h2>Melhores para modelar</h2><span class="mut peq">escaladas e com poucas contas usando o mesmo criativo</span></div>
+      ${d.oportunidades?.length ? `<div class="painel-box rolar">${tabela('tbOport', d.oportunidades, [c[1], c[2], c[3], c.find((x) => x[0] === 'Oportunidade')], est)}</div>` : '<div class="painel-box vazio">Aparece quando houver anunciantes escalados.</div>'}</div>
     <div><div class="secao-cab"><h2>Gateways</h2><a href="#/gateways" class="peq">Ver todos</a></div>
       <div class="painel-box rolar">${tabela('tbGw', d.gateways, [['Gateway', (g) => `<a href="#/gateways/${g.id}"><b>${esc(g.nome)}</b></a>`],
         ['Na Biblioteca', (g) => fmt(g.totalBiblioteca), null, 'dir'], ['Checkouts', (g) => fmt(g.checkouts), null, 'dir'], ['Anunciantes', (g) => fmt(g.paginas), null, 'dir']], {})}</div></div>
