@@ -8,6 +8,10 @@ import {
 } from './score.js';
 import { all, get, run, iniciar, agora, lerAnalise, lerConfig, salvarConfig } from './db.js';
 import { GATEWAYS, linksExternos, hostDe } from './util.js';
+import { authAtiva, configPublica, verificar } from './auth.js';
+import { comUsuario, uid } from './contexto.js';
+import { servirMiniatura } from './midia.js';
+import { usoELimites } from './uso.js';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const NUVEM = !!process.env.VERCEL || process.env.MODO === 'nuvem';
@@ -42,8 +46,8 @@ async function acionarGithub() {
 
 async function estadoTarefa() {
   if (!NUVEM) return local;
-  const f = await get('SELECT * FROM fila ORDER BY id DESC LIMIT 1');
-  const pend = await get("SELECT COUNT(*) n FROM fila WHERE status IN ('pendente','rodando')");
+  const f = await get('SELECT * FROM tarefas ORDER BY id DESC LIMIT 1');
+  const pend = await get("SELECT COUNT(*) n FROM tarefas WHERE status IN ('pendente','rodando')");
   if (!f) return { rodando: false, log: [], fila: 0 };
   return {
     rodando: ['pendente', 'rodando'].includes(f.status), status: f.status, tipo: f.tipo, descricao: f.descricao,
@@ -96,14 +100,23 @@ function servirEstatico(res, rota) {
   return true;
 }
 
-function autorizado(req) {
-  const senha = process.env.SENHA_PAINEL;
-  if (!senha) return true;
-  const c = /(?:^|;\s*)senha=([^;]+)/.exec(req.headers.cookie || '')?.[1];
-  return req.headers['x-senha'] === senha || decodeURIComponent(c || '') === senha;
+// Itens salvos antes do login existir (user_id = '') passam para o dono no primeiro acesso dele.
+let legadoMigrado = false;
+async function migrarLegado(usuario) {
+  if (legadoMigrado || !usuario.dono) return;
+  legadoMigrado = true;
+  await run("UPDATE favoritos SET user_id = ? WHERE user_id = ''", [usuario.id]);
 }
 
 export async function handler(req, res) {
+  const rotaPublica = /^\/api\/(publico|midia)\//.test(new URL(req.url, 'http://x').pathname);
+  if (!authAtiva() || rotaPublica || !req.url.startsWith('/api/')) return comUsuario(null, () => atender(req, res));
+  const v = await verificar(req).catch((e) => ({ erro: 'falha ao validar login: ' + e.message, status: 401 }));
+  if (v.erro) return json(res, { erro: v.erro, precisaLogin: true }, v.status);
+  return comUsuario(v.usuario, async () => { await migrarLegado(v.usuario).catch(() => {}); return atender(req, res); });
+}
+
+async function atender(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const q = Object.fromEntries(url.searchParams);
   const rota = url.pathname;
@@ -112,7 +125,8 @@ export async function handler(req, res) {
       if (servirEstatico(res, rota)) return;
       res.statusCode = 404; return res.end('não encontrado');
     }
-    if (!autorizado(req)) return json(res, { erro: 'senha', precisaSenha: true }, 401);
+    if (rota === '/api/publico/config') return json(res, configPublica());
+    if (rota.startsWith('/api/midia/')) return servirMiniatura(res, decodeURIComponent(rota.split('/').pop()));
     await iniciar();
 
     const pais = String(q.pais || 'BR').toUpperCase();
@@ -143,7 +157,7 @@ export async function handler(req, res) {
       if (q.dias) { filtros.push('inicio <= ?'); p.push(Math.floor(Date.now() / 1000) - Number(q.dias) * 86400); }
       const ordem = q.ordem === 'novos' ? 'inicio DESC' : q.ordem === 'antigos' ? 'inicio ASC' : 'dup DESC, inicio ASC';
       p.push(Math.min(Number(q.limite || 120), 300));
-      return json(res, await all(`SELECT ad_id, page_id, page_name, ativo, inicio, dup, formato, plataformas, SUBSTR(texto, 1, 600) texto, titulo, link, cta, thumb, video, gateway
+      return json(res, await all(`SELECT ad_id, page_id, page_name, ativo, inicio, dup, formato, plataformas, SUBSTR(texto, 1, 600) texto, titulo, link, cta, CASE WHEN thumb_arquivo IS NOT NULL THEN '/api/midia/' || ad_id ELSE thumb END AS thumb, video, gateway
         FROM anuncios WHERE ${filtros.join(' AND ')} ORDER BY ${ordem} LIMIT ?`, p));
     }
 
@@ -151,10 +165,10 @@ export async function handler(req, res) {
     if (rota === '/api/favoritos' && req.method === 'POST') {
       const b = await corpo(req);
       if (!b.tipo || !b.chave) return json(res, { erro: 'tipo e chave obrigatórios' }, 400);
-      if (b.remover) await run('DELETE FROM favoritos WHERE tipo = ? AND chave = ?', [b.tipo, String(b.chave)]);
-      else await run(`INSERT INTO favoritos (tipo, chave, nome, nota, criado) VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(tipo, chave) DO UPDATE SET nome = excluded.nome, nota = excluded.nota`,
-        [b.tipo, String(b.chave), b.nome || '', b.nota || '', agora()]);
+      if (b.remover) await run('DELETE FROM favoritos WHERE user_id = ? AND tipo = ? AND chave = ?', [uid(), b.tipo, String(b.chave)]);
+      else await run(`INSERT INTO favoritos (user_id, tipo, chave, nome, nota, criado, atualizado) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, tipo, chave) DO UPDATE SET nome = excluded.nome, nota = excluded.nota, atualizado = excluded.atualizado`,
+        [uid(), b.tipo, String(b.chave), b.nome || '', b.nota || '', agora(), agora()]);
       return json(res, { ok: true });
     }
 
@@ -172,11 +186,13 @@ export async function handler(req, res) {
       const m = montarArgs(b);
       if (!m) return json(res, { erro: 'tipo inválido' }, 400);
       if (!NUVEM) return json(res, { iniciado: rodarLocal(b.tipo, m.args, m.desc), tarefa: local });
-      await run('INSERT INTO fila (tipo, args, descricao, criado) VALUES (?, ?, ?, ?)', [b.tipo, JSON.stringify(m.args), m.desc, agora()]);
+      await run('INSERT INTO tarefas (tipo, args, descricao, user_id, origem, criado) VALUES (?, ?, ?, ?, ?, ?)',
+        [b.tipo, JSON.stringify(m.args), m.desc, uid(), 'painel', agora()]);
       return json(res, { iniciado: true, aviso: await acionarGithub() });
     }
     if (rota === '/api/tarefa') return json(res, await estadoTarefa());
-    if (rota === '/api/historico-tarefas') return json(res, await all('SELECT id, tipo, descricao, status, criado, inicio, fim FROM fila ORDER BY id DESC LIMIT 30'));
+    if (rota === '/api/historico-tarefas') return json(res, await all('SELECT id, tipo, descricao, status, erro, criado, inicio, fim FROM tarefas ORDER BY id DESC LIMIT 30'));
+    if (rota === '/api/uso') return json(res, await usoELimites());
 
     return json(res, { erro: 'rota não encontrada' }, 404);
   } catch (e) {

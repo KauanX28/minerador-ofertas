@@ -6,13 +6,18 @@
 //   node src/tarefa.js analisar --url exemplo.com.br
 //   node src/tarefa.js atualizar                       (reconta anúncios das páginas acompanhadas)
 //   node src/tarefa.js rotina                          (monitoramento automático: fila + rodízio de nichos/gateways)
+//   node src/tarefa.js fila                            (só os pedidos feitos pelo painel)
+//   node src/tarefa.js manutencao                      (retenção do banco, limpeza de miniaturas, alerta de limites)
 // Opções gerais: --pais BR | ALL | PT | ES ...   --visivel (mostra o navegador)
-import { abrirNavegador, buscarPalavra, buscarPagina, pausa, BloqueioError } from './scraper.js';
+import { abrirNavegador, buscarPalavra, buscarPagina, pausa, BloqueioError, EstruturaError, estatisticas, registrarColetas } from './scraper.js';
 import {
   all, get, run, iniciar, agora, recalcularChaves, salvarAnuncios, salvarHistorico, salvarBusca, marcarInativos,
   salvarCheckout, salvarAnalise, lerAnalise, lerConfig,
 } from './db.js';
-import { fechar } from './banco.js';
+import { fechar, usaPostgres } from './banco.js';
+import { alertar } from './alerta.js';
+import { processarMiniaturas, limparMiniaturas } from './midia.js';
+import { usoELimites } from './uso.js';
 import { rankingPaginas } from './score.js';
 import { analisarPagina, lerCheckout } from './analisador.js';
 import { gatewayPorTexto, hostDe, detectarGateway, raizDominio, GATEWAYS } from './util.js';
@@ -195,7 +200,7 @@ async function analisar(ctx, o) {
 // Reconta cada página no(s) país(es) em que ela é acompanhada.
 async function atualizar(ctx, o) {
   const lim = Number(o.limite || 150);
-  const pares = await all(`SELECT page_id, pais FROM historico GROUP BY page_id, pais ORDER BY MAX(ativos) DESC LIMIT ?`, [lim]);
+  const pares = await all(`SELECT page_id, pais FROM historico_diario GROUP BY page_id, pais ORDER BY MAX(ativos) DESC LIMIT ?`, [lim]);
   const chave = new Set(pares.map((p) => p.page_id + '|' + p.pais));
   for (const f of await all("SELECT f.chave, p.paises FROM favoritos f LEFT JOIN paginas p ON p.page_id = f.chave WHERE f.tipo = 'pagina'")) {
     for (const pais of JSON.parse(f.paises || '["BR"]')) if (!chave.has(f.chave + '|' + pais)) { pares.unshift({ page_id: f.chave, pais }); chave.add(f.chave + '|' + pais); }
@@ -209,27 +214,36 @@ async function atualizar(ctx, o) {
 }
 
 // Executa pedidos feitos pelo painel (tabela `fila`), gravando o log para o painel acompanhar.
+// Pega o próximo pedido com trava: dois robôs (Actions e PC local) nunca pegam o mesmo.
+async function pegarTarefa() {
+  const sql = `UPDATE tarefas SET status = 'rodando', inicio = ?, tentativas = tentativas + 1, origem = ?
+    WHERE id = (SELECT id FROM tarefas WHERE status = 'pendente' ORDER BY id LIMIT 1${usaPostgres ? ' FOR UPDATE SKIP LOCKED' : ''})
+    RETURNING *`;
+  return get(sql, [agora(), ORIGEM]);
+}
+
 async function processarFila(ctx, o) {
+  // Pedidos presos em "rodando" por mais de 2 h (robô caiu) voltam para a fila.
+  await run("UPDATE tarefas SET status = 'pendente' WHERE status = 'rodando' AND inicio < ? AND tentativas < 3", [agora() - 7200]);
   for (;;) {
-    const item = await get("SELECT * FROM fila WHERE status = 'pendente' ORDER BY id LIMIT 1");
+    const item = await pegarTarefa();
     if (!item) return;
-    await run("UPDATE fila SET status = 'rodando', inicio = ? WHERE id = ?", [agora(), item.id]);
     const linhas = [];
     const logOriginal = log;
     let ultimoFlush = 0;
     log = (...m) => {
       logOriginal(...m); linhas.push(m.join(' '));
-      if (Date.now() - ultimoFlush > 4000) { ultimoFlush = Date.now(); run('UPDATE fila SET log = ? WHERE id = ?', [linhas.slice(-300).join('\n'), item.id]).catch(() => {}); }
+      if (Date.now() - ultimoFlush > 4000) { ultimoFlush = Date.now(); run('UPDATE tarefas SET log = ? WHERE id = ?', [linhas.slice(-300).join('\n'), item.id]).catch(() => {}); }
     };
-    let status = 'concluido';
+    let status = 'concluido', erro = null;
     try {
       const io = { ...lerArgs(JSON.parse(item.args || '[]')) };
       io.pais = typeof io.pais === 'string' ? io.pais : o.pais;
       await TAREFAS[item.tipo](ctx, io);
-    } catch (e) { status = 'erro'; log(`!! ${e.message}`); if (e instanceof BloqueioError) throw e; }
+    } catch (e) { status = 'erro'; erro = e.message; log(`!! ${e.message}`); if (e instanceof BloqueioError) throw e; }
     finally {
       log = logOriginal;
-      await run('UPDATE fila SET status = ?, fim = ?, log = ? WHERE id = ?', [status, agora(), linhas.slice(-300).join('\n'), item.id]);
+      await run('UPDATE tarefas SET status = ?, fim = ?, erro = ?, log = ? WHERE id = ?', [status, agora(), erro, linhas.slice(-300).join('\n'), item.id]);
     }
   }
 }
@@ -264,7 +278,27 @@ async function rotina(ctx, o) {
   await processarFila(ctx, o);
 }
 
-const TAREFAS = { minerar, gateway, analisar, atualizar, rotina, fila: processarFila };
+// Retenção para caber nos 500 MB: texto completo só de anúncio ativo ou salvo; inativo há 60+ dias fora das listas é apagado.
+async function manutencao(ctx, o) {
+  const t = agora();
+  const foraDasListas = `NOT EXISTS (SELECT 1 FROM favoritos f WHERE (f.tipo = 'pagina' AND f.chave = anuncios.page_id) OR (f.tipo = 'checkout' AND f.chave = anuncios.checkout))`;
+  await limparMiniaturas({ log });
+  const apagar = await get(`SELECT COUNT(*) n FROM anuncios WHERE ativo = 0 AND inativo_desde < ? AND thumb_arquivo IS NULL AND ${foraDasListas}`, [t - 60 * 86400]);
+  await run(`DELETE FROM anuncios WHERE ativo = 0 AND inativo_desde < ? AND thumb_arquivo IS NULL AND ${foraDasListas}`, [t - 60 * 86400]);
+  await run(`UPDATE anuncios SET texto = SUBSTR(texto, 1, 300) WHERE ativo = 0 AND inativo_desde < ? AND LENGTH(texto) > 300 AND ${foraDasListas}`, [t - 7 * 86400]);
+  await run('DELETE FROM coletas WHERE quando < ?', [t - 30 * 86400]);
+  await run("DELETE FROM tarefas WHERE status <> 'pendente' AND criado < ?", [t - 30 * 86400]);
+  await run('DELETE FROM historico_diario WHERE data < ?', [new Date((t - 400 * 86400) * 1000).toISOString().slice(0, 10)]);
+  log(`> Retenção: ${apagar.n} anúncios inativos há 60+ dias removidos`);
+  const uso = await usoELimites();
+  for (const i of uso.itens) if (i.alerta) await alertar(`${i.nome} em ${i.pct}% do limite grátis.`, { log });
+  const errosHoje = uso.raspador.coletas24h.erro || 0;
+  if (errosHoje >= 5) await alertar(`${errosHoje} coletas com erro nas últimas 24 h. Último: ${uso.raspador.ultimoErro?.erro || '?'}`, { log });
+}
+
+const TAREFAS = { minerar, gateway, analisar, atualizar, rotina, manutencao, fila: processarFila };
+const SEM_NAVEGADOR = new Set(['manutencao']);
+const ORIGEM = process.env.GITHUB_ACTIONS ? 'actions' : 'local';
 
 const o = lerArgs(process.argv.slice(2));
 const tipo = o._[0] || 'minerar';
@@ -273,17 +307,30 @@ if (!TAREFAS[tipo]) { log(`Tarefa desconhecida: ${tipo}. Use: ${Object.keys(TARE
 await iniciar();
 await recalcularChaves();
 o.pais = typeof o.pais === 'string' ? o.pais : (await lerConfig()).pais || 'BR';
-const { browser, ctx } = await abrirNavegador({ visivel: !!o.visivel });
+
+// Cada execução e cada coleta ficam registradas (minutos usados e saúde do raspador).
+const exec = await get('INSERT INTO execucoes (origem, tipo, inicio, status) VALUES (?, ?, ?, ?) RETURNING id', [ORIGEM, tipo, agora(), 'rodando']);
+registrarColetas((c) => run('INSERT INTO coletas (quando, origem, tipo, termo, pais, total, lidos, status, erro, duracao_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  [agora(), ORIGEM, c.tipo, c.termo, c.pais, c.total, c.lidos, c.status, c.erro || null, c.duracao_ms]).catch(() => {}));
+
+const navegador = SEM_NAVEGADOR.has(tipo) ? null : await abrirNavegador({ visivel: !!o.visivel });
 const inicio = Date.now();
-let codigo = 0;
+let codigo = 0, falha = null;
 try {
-  await TAREFAS[tipo](ctx, o);
+  await TAREFAS[tipo](navegador?.ctx, o);
+  if (navegador && ['rotina', 'minerar', 'gateway', 'fila'].includes(tipo)) await processarMiniaturas({ log });
 } catch (e) {
-  codigo = 1;
+  codigo = 1; falha = e;
   log(e instanceof BloqueioError ? `\n!! ${e.message}` : `\n!! Erro: ${e.stack || e.message}`);
 } finally {
-  await browser.close();
+  await navegador?.browser.close();
 }
-log(`\nConcluído em ${Math.round((Date.now() - inicio) / 1000)}s.`);
+// Raspador quebrado: erro de estrutura, bloqueio ou muitas falhas na mesma execução.
+if (falha instanceof EstruturaError || falha instanceof BloqueioError || estatisticas.erros >= 3) {
+  await alertar(`raspador com problema (${tipo}, ${ORIGEM}): ${falha?.message || estatisticas.erros + ' coletas falharam'}`, { log });
+}
+await run('UPDATE execucoes SET fim = ?, status = ?, coletas = ?, erros = ? WHERE id = ?',
+  [agora(), codigo ? 'erro' : 'ok', estatisticas.paginas, estatisticas.erros, exec.id]).catch(() => {});
+log(`\nConcluído em ${Math.round((Date.now() - inicio) / 1000)}s (${estatisticas.paginas} páginas, ${estatisticas.erros} erros).`);
 await fechar();
 process.exit(codigo);

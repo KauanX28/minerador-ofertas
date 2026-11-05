@@ -2,6 +2,7 @@
 // rodando há muito tempo, com o mesmo criativo duplicado e crescendo entre varreduras.
 import { all, get, hoje } from './db.js';
 import { GATEWAYS } from './util.js';
+import { uid } from './contexto.js';
 
 const DIA = 86400;
 const clamp = (x) => Math.max(0, Math.min(1, x));
@@ -25,7 +26,7 @@ export function pontuar({ ativos, dias, dupMax, crescimentoPct }) {
 }
 
 async function favoritosSet(tipo) {
-  return new Set((await all('SELECT chave FROM favoritos WHERE tipo = ?', [tipo])).map((r) => r.chave));
+  return new Set((await all('SELECT chave FROM favoritos WHERE tipo = ? AND user_id = ?', [tipo, uid()])).map((r) => r.chave));
 }
 
 async function mapaAnalises() {
@@ -35,8 +36,8 @@ async function mapaAnalises() {
 }
 
 // Última contagem de cada página NAQUELE país (até uma data).
-const SQL_ULTIMO = `SELECT h.page_id, h.ativos, h.data FROM historico h
-  JOIN (SELECT page_id, MAX(data) d FROM historico WHERE data <= ? AND pais = ? GROUP BY page_id) m
+const SQL_ULTIMO = `SELECT h.page_id, h.ativos, h.data FROM historico_diario h
+  JOIN (SELECT page_id, MAX(data) d FROM historico_diario WHERE data <= ? AND pais = ? GROUP BY page_id) m
     ON m.page_id = h.page_id AND m.d = h.data WHERE h.pais = ?`;
 
 // Países que já têm dados (para as abas do painel).
@@ -52,7 +53,7 @@ export async function rankingPaginas({ pais = 'BR', nicho = '', min = 0, busca =
     all('SELECT * FROM paginas'),
     all(SQL_ULTIMO, ['9999-12-31', pais, pais]),
     all(SQL_ULTIMO, [diasAtras(5), pais, pais]),
-    all(`SELECT page_id, inicio, dup, dominio, gateway, thumb, titulo, SUBSTR(texto, 1, 220) texto, formato
+    all(`SELECT page_id, inicio, dup, dominio, gateway, CASE WHEN thumb_arquivo IS NOT NULL THEN '/api/midia/' || ad_id ELSE thumb END AS thumb, titulo, SUBSTR(texto, 1, 220) texto, formato
          FROM anuncios WHERE ativo = 1 AND pais = ? ORDER BY dup DESC, inicio ASC`, [pais]),
     mapaAnalises(),
     favoritosSet('pagina'),
@@ -117,7 +118,7 @@ export async function rankingPaginas({ pais = 'BR', nicho = '', min = 0, busca =
 export async function rankingDominios({ pais = 'BR', nicho = '' } = {}) {
   const [paginas, rows, analises, favs] = await Promise.all([
     rankingPaginas({ pais, nicho }),
-    all(`SELECT dominio, page_id, MIN(inicio) inicio, MAX(dup) dup, MAX(thumb) thumb, MAX(link) link
+    all(`SELECT dominio, page_id, MIN(inicio) inicio, MAX(dup) dup, MAX(CASE WHEN thumb_arquivo IS NOT NULL THEN '/api/midia/' || ad_id ELSE thumb END) thumb, MAX(link) link
          FROM anuncios WHERE ativo = 1 AND pais = ? AND dominio IS NOT NULL GROUP BY dominio, page_id`, [pais]),
     mapaAnalises(),
     favoritosSet('oferta'),
@@ -151,7 +152,7 @@ export async function rankingDominios({ pais = 'BR', nicho = '' } = {}) {
 export async function rankingGateway(id, pais = 'BR') {
   const agora = Date.now() / 1000;
   const [rows, cks, pags, hist, favs, analises, buscas] = await Promise.all([
-    all(`SELECT checkout, COUNT(*) anuncios, SUM(dup) variacoes, MIN(inicio) inicio, MAX(thumb) thumb,
+    all(`SELECT checkout, COUNT(*) anuncios, SUM(dup) variacoes, MIN(inicio) inicio, MAX(CASE WHEN thumb_arquivo IS NOT NULL THEN '/api/midia/' || ad_id ELSE thumb END) thumb,
            MAX(link) link, GROUP_CONCAT(DISTINCT page_id) paginas FROM anuncios
          WHERE gateway = ? AND pais = ? AND ativo = 1 AND checkout IS NOT NULL GROUP BY checkout ORDER BY SUM(dup) DESC, COUNT(*) DESC LIMIT 200`, [id, pais]),
     all('SELECT * FROM checkouts WHERE gateway = ?', [id]),
@@ -209,8 +210,9 @@ export async function detalhePagina(pageId, pais = 'BR') {
   const [ranking, anuncios, historico] = await Promise.all([
     rankingPaginas({ pais }),
     all('SELECT * FROM anuncios WHERE page_id = ? AND pais = ? ORDER BY ativo DESC, dup DESC, inicio ASC LIMIT 60', [pageId, pais]),
-    all('SELECT data, ativos FROM historico WHERE page_id = ? AND pais = ? ORDER BY data', [pageId, pais]),
+    all('SELECT data, ativos FROM historico_diario WHERE page_id = ? AND pais = ? ORDER BY data', [pageId, pais]),
   ]);
+  for (const a of anuncios) if (a.thumb_arquivo) a.thumb = `/api/midia/${a.ad_id}`;
   return { pagina: ranking.find((x) => x.page_id === pageId), anuncios, historico };
 }
 
@@ -233,7 +235,7 @@ export async function painelGeral(pais = 'BR') {
     get('SELECT COUNT(*) n FROM buscas WHERE quando > ? AND pais = ?', [agora - 7 * DIA, pais]),
     resumoGateways(pais),
     get('SELECT COUNT(*) n FROM analises'),
-    get('SELECT COUNT(*) n FROM favoritos'),
+    get('SELECT COUNT(*) n FROM favoritos WHERE user_id = ?', [uid()]),
   ]);
   return {
     paginas: pags.length, anuncios: nAds.n,
@@ -248,7 +250,7 @@ export async function painelGeral(pais = 'BR') {
 }
 
 export async function listaFavoritos(pais = 'BR') {
-  const [favs, pags] = await Promise.all([all('SELECT * FROM favoritos ORDER BY criado DESC'), rankingPaginas({ pais })]);
+  const [favs, pags] = await Promise.all([all('SELECT * FROM favoritos WHERE user_id = ? ORDER BY criado DESC', [uid()]), rankingPaginas({ pais })]);
   const m = new Map(pags.map((p) => [p.page_id, p]));
   return favs.map((f) => ({ ...f, pagina: f.tipo === 'pagina' ? m.get(f.chave) || null : null }));
 }

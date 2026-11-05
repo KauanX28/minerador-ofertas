@@ -49,39 +49,67 @@ Dados locais: `dados/minerador.db` (SQLite).
 ## Hospedagem grátis 24h (Vercel + Supabase + GitHub Actions)
 
 ```
-GitHub Actions (robô com navegador, 2x por dia e quando você clica "Minerar")
-        │ grava
-        ▼
-Supabase (Postgres grátis) ◄── lê ── Vercel (painel online)
+GitHub Actions ── robô com navegador (2x/dia + pedidos do painel) ──┐
+               └─ manutenção (diária: migração, retenção, alertas)  │ grava
+                                                                     ▼
+Vercel (painel + login) ── lê / enfileira ──► Supabase (Postgres 500 MB + Storage 1 GB + Auth)
 ```
 
-Tudo no plano grátis. O banco **minerador-ofertas** já foi criado no Supabase (região São Paulo) e o projeto
-**minerador-ofertas** já existe na Vercel.
+Tudo no plano grátis (Vercel Hobby, Supabase Free, GitHub Free). Projeto atual: repositório privado
+`KauanX28/minerador-ofertas`, painel em https://minerador-ofertas-weld.vercel.app, banco *minerador-ofertas* (São Paulo).
 
-1. **GitHub:** crie um repositório (público = minutos de Actions ilimitados; privado = 2.000 min/mês, suficiente
-   para ~3 rodadas por dia) e envie esta pasta.
-2. **String de conexão do Supabase:** Supabase → projeto *minerador-ofertas* → **Connect** → *Transaction pooler*.
-   Copie a URL (`postgresql://postgres.xxxx:[SENHA]@...pooler.supabase.com:6543/postgres`). Se não souber a senha
-   do banco, redefina em *Project Settings → Database*.
-3. **GitHub → Settings → Secrets and variables → Actions → New secret:** `DATABASE_URL` = a URL acima.
-4. **Vercel → projeto minerador-ofertas → Settings:**
-   - *Git*: conecte o repositório do passo 1 (cada `git push` publica o painel).
-   - *Environment Variables*: `DATABASE_URL` = a mesma URL.
-   - Para o botão **Minerar agora** acionar o robô na hora: crie um *fine-grained token* no GitHub
-     (Settings → Developer settings → Personal access tokens) só para esse repositório, com permissão
-     **Actions: Read and write**, e adicione `GITHUB_TOKEN` = token e `GITHUB_REPO` = `seu-usuario/seu-repo`.
-     Sem isso, os pedidos ficam na fila e rodam na próxima rodada agendada.
-5. **Levar os dados que você já minerou** (PowerShell, nesta pasta):
-   ```powershell
-   $env:DATABASE_URL = "cole-a-url-aqui"; node --no-warnings src/migrar-para-nuvem.js
-   ```
-6. No GitHub, aba **Actions → minerador → Run workflow** para a primeira rodada.
+### Variáveis e segredos
 
-O painel na Vercel fica protegido pelo login da Vercel (só você acessa). Para liberar para outras pessoas com
-senha própria, desligue a *Deployment Protection* e defina `SENHA_PAINEL` nas variáveis da Vercel.
+| Onde | Nome | Tipo | Para quê |
+|---|---|---|---|
+| GitHub (secret) | `DATABASE_URL` | segredo | Conexão do robô com o Postgres (Supabase → Connect → Transaction pooler, porta 6543) |
+| GitHub (secret) | `SUPABASE_SERVICE_ROLE_KEY` | segredo | Robô grava as miniaturas no Storage |
+| GitHub (secret) | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | segredo, opcional | Alertas (raspador quebrado, limites em 80%) |
+| GitHub (variable) | `SUPABASE_URL` | público | URL do projeto Supabase |
+| GitHub (variable) | `LIMITE_PAGINAS_EXECUCAO` | opcional | Máximo de páginas por execução do robô (padrão 500) |
+| Vercel | `DATABASE_URL` | segredo | Conexão do painel com o Postgres |
+| Vercel | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | públicos | Login (chave *publishable*, feita para o navegador) |
+| Vercel | `EMAILS_PERMITIDOS` | público | E-mails que podem entrar (o primeiro é o dono) |
+| Vercel | `GITHUB_TOKEN`, `GITHUB_REPO` | segredo, opcional | "Minerar agora" aciona o robô na hora (token *fine-grained* só deste repositório, permissão Actions: Read and write) |
+| Vercel | `LIMITE_MINUTOS_ACTIONS` | opcional | 2000 (privado) ou 0 (público = ilimitado), para a tela Uso e limites |
 
-**Rotina automática** (aba Configurações): a cada rodada processa a fila, reconta as páginas acompanhadas,
-minera o próximo nicho/país do rodízio e atualiza um gateway.
+Scripts que pedem os segredos sem mostrá-los na tela (rode no PowerShell, nesta pasta):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\configurar-nuvem.ps1     # DATABASE_URL no GitHub e na Vercel + cópia dos dados locais
+powershell -ExecutionPolicy Bypass -File .\configurar-segredos.ps1  # chave de serviço do Supabase e Telegram (opcional)
+```
+
+### Primeiro acesso (login)
+
+O painel online pede login (Supabase Auth). Para criar sua conta sem depender de e-mail de confirmação:
+Supabase → *Authentication* → *Users* → **Add user** → *Create new user* → seu e-mail (o mesmo de
+`EMAILS_PERMITIDOS`) + senha → marque **Auto Confirm User**. Depois entre no painel com esse e-mail e senha.
+Itens salvos antes do login passam automaticamente para o dono no primeiro acesso.
+
+### Banco: migrações versionadas
+
+O esquema evolui por migrações numeradas em `src/migracoes.js` (registradas na tabela `schema_migracoes`).
+Elas são aplicadas pelo workflow **manutencao** a cada push que muda o banco, pelo robô e pelo modo local — nunca
+pela Vercel. Para aplicar à mão: `node --no-warnings src/migrar.js` (com `DATABASE_URL` definida, aplica no Supabase).
+
+### Limites respeitados (tela "Uso e limites")
+
+- **Banco 500 MB** (alerta em 80%): anúncios inativos há 60+ dias fora das listas são apagados; texto completo só
+  enquanto o anúncio está ativo ou salvo; histórico diário agregado.
+- **Storage 1 GB:** miniaturas WebP de 320 px (~13 KB); vídeos não são guardados; miniaturas de anúncios inativos
+  há 30+ dias fora das listas são apagadas.
+- **Tráfego 5 GB/mês:** miniaturas servidas por `/api/midia/:id` com cache de 1 ano na CDN da Vercel.
+- **Funções da Vercel:** só leitura e enfileiramento; coleta e análise rodam no Actions.
+- **Minutos do Actions:** cada execução registra sua duração; limite de páginas por execução.
+
+### Robô no seu PC (segunda fonte de IP)
+
+Com `DATABASE_URL` definida, o PC consome a mesma fila da nuvem, sem conflito (trava `FOR UPDATE SKIP LOCKED`):
+
+```powershell
+$env:DATABASE_URL = "postgresql://..."; node --no-warnings src/tarefa.js fila
+```
 
 ---
 

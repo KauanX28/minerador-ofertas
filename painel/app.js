@@ -9,6 +9,8 @@ const diasDesde = (t) => (t ? Math.max(0, Math.floor((Date.now() / 1000 - t) / 8
 
 // ---------- ícones (traço) ----------
 const ICONES = {
+  uso: '<path d="M12 14l4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
+  sair: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
   painel: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
   ofertas: '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
   anuncios: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
@@ -37,7 +39,7 @@ const MENU = [
   ['Análise', [['inicio', 'Painel', 'painel'], ['ofertas', 'Ofertas escaladas', 'ofertas'], ['anuncios', 'Biblioteca de anúncios', 'anuncios'],
     ['gateways', 'Gateways', 'gateways'], ['dominios', 'Análise de domínio', 'dominio']]],
   ['Coleta', [['minerar', 'Minerar', 'minerar'], ['listas', 'Minhas listas', 'listas']]],
-  ['Recursos', [['ferramentas', 'Calculadoras e plano', 'calc'], ['prompts', 'Prompts de IA', 'prompts'], ['metodo', 'Método', 'metodo'], ['config', 'Configurações', 'config']]],
+  ['Recursos', [['ferramentas', 'Calculadoras e plano', 'calc'], ['prompts', 'Prompts de IA', 'prompts'], ['metodo', 'Método', 'metodo'], ['uso', 'Uso e limites', 'uso'], ['config', 'Configurações', 'config']]],
 ];
 
 // ---------- países ----------
@@ -60,15 +62,51 @@ const bib = {
 };
 
 // ---------- utilidades ----------
+// ---------- login (Supabase Auth) ----------
+let SB = null; // cliente do Supabase quando o login está ativo (nuvem)
+async function tokenAtual() {
+  if (!SB) return null;
+  const { data } = await SB.auth.getSession();
+  return data.session?.access_token || null;
+}
+function telaLogin(msg = '') {
+  document.body.classList.add('sem-acesso');
+  $('#conteudo').innerHTML = `<div class="login"><div class="painel-box"><div class="pb-corpo">
+    <div class="marca-login"><span class="logo">M</span>Minerador</div>
+    <h1>Entrar</h1><p class="mut">Use o e-mail autorizado para este painel.</p>
+    ${msg ? `<div class="aviso-erro">${esc(msg)}</div>` : ''}
+    <form id="fLogin" class="login-form">
+      <label class="campo">E-mail<input id="lEmail" type="email" required autocomplete="email"></label>
+      <label class="campo">Senha<input id="lSenha" type="password" autocomplete="current-password" placeholder="deixe vazio para receber um link por e-mail"></label>
+      <button class="pri" type="submit">Entrar</button>
+      <button class="fantasma" type="button" id="lCriar">Primeiro acesso: criar conta com este e-mail</button>
+    </form></div></div></div>`;
+  const email = () => $('#lEmail').value.trim(), senha = () => $('#lSenha').value;
+  $('#fLogin').onsubmit = async (e) => {
+    e.preventDefault();
+    if (!senha()) {
+      const { error } = await SB.auth.signInWithOtp({ email: email(), options: { emailRedirectTo: location.origin } });
+      return error ? telaLogin(error.message) : toast('Enviamos um link de acesso para o seu e-mail.');
+    }
+    const { error } = await SB.auth.signInWithPassword({ email: email(), password: senha() });
+    if (error) return telaLogin(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : error.message);
+    location.reload();
+  };
+  $('#lCriar').onclick = async () => {
+    if (!email() || senha().length < 8) return toast('Informe o e-mail e uma senha com 8+ caracteres.');
+    const { error } = await SB.auth.signUp({ email: email(), password: senha(), options: { emailRedirectTo: location.origin } });
+    toast(error ? error.message : 'Conta criada. Confirme pelo link enviado ao seu e-mail e depois entre.');
+  };
+}
+async function sair() { await SB?.auth.signOut(); location.reload(); }
+
 async function api(url, opcoes) {
-  if (!opcoes && url.startsWith('/api/') && !/[?&]pais=/.test(url)) url += (url.includes('?') ? '&' : '?') + 'pais=' + PAIS;
-  const r = await fetch(url, opcoes);
-  if (r.status === 401) {
-    const s = prompt('Senha do painel:');
-    if (s) { document.cookie = `senha=${encodeURIComponent(s)}; path=/; max-age=31536000`; return api(url, opcoes); }
-    throw new Error('senha necessária');
-  }
-  const d = await r.json();
+  if ((!opcoes || !opcoes.method || opcoes.method === 'GET') && url.startsWith('/api/') && !/[?&]pais=/.test(url)) url += (url.includes('?') ? '&' : '?') + 'pais=' + PAIS;
+  const token = await tokenAtual();
+  const headers = { ...(opcoes?.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  const r = await fetch(url, { ...(opcoes || {}), headers });
+  const d = await r.json().catch(() => ({}));
+  if (d?.precisaLogin) { telaLogin(r.status === 403 ? d.erro : ''); throw new Error(d.erro || 'login necessário'); }
   if (d?.erro) throw new Error(d.erro);
   return d;
 }
@@ -700,6 +738,34 @@ TELAS.config = async (el) => {
   };
 };
 
+TELAS.uso = async (el) => {
+  const u = await api('/api/uso');
+  const fmtBytes = (b) => (b == null ? '—' : b >= 1073741824 ? (b / 1073741824).toFixed(2) + ' GB' : b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.round(b / 1024) + ' KB');
+  const val = (i) => (i.unidade === 'bytes' ? fmtBytes(i.usado) : i.usado == null ? '—' : fmt(i.usado) + ' ' + i.unidade);
+  const lim = (i) => (i.limite == null ? 'sem limite' : i.unidade === 'bytes' ? fmtBytes(i.limite) : fmt(i.limite) + ' ' + i.unidade);
+  const c = u.raspador.coletas24h;
+  el.innerHTML = `
+  <div class="cab"><div><h1>Uso e limites</h1><p>Tudo roda nos planos grátis. Aqui você acompanha o consumo e recebe alerta a partir de 80%.</p></div></div>
+  <div class="grade-3">${u.itens.map((i) => `<div class="painel-box"><div class="pb-corpo">
+    <div class="linha" style="justify-content:space-between"><b>${esc(i.nome)}</b>${i.alerta ? '<span class="tag st-forte">acima de 80%</span>' : ''}</div>
+    <div class="res" style="margin-top:6px">${val(i)} <span class="mut peq">de ${lim(i)}</span></div>
+    ${i.pct != null ? `<div class="score" style="margin:8px 0"><i style="height:7px"><span style="width:${Math.min(100, i.pct)}%;${i.alerta ? 'background:var(--erro)' : ''}"></span></i><b style="width:auto">${i.pct}%</b></div>` : ''}
+    <div class="peq mut">${esc(i.obs || '')}</div></div></div>`).join('')}</div>
+  <div class="grade-2 secao">
+    <div><div class="secao-cab"><h2>Saúde do raspador (24 h)</h2></div><div class="painel-box pb-corpo" style="padding:14px 16px">
+      <div class="linha"><span class="tag st-validando">${fmt(c.ok || 0)} ok</span><span class="tag">${fmt(c.vazio || 0)} sem resultado</span><span class="tag st-forte">${fmt(c.erro || 0)} com erro</span></div>
+      ${u.raspador.ultimoErro ? `<p class="peq" style="margin-bottom:0">Último erro (${quando(u.raspador.ultimoErro.quando)}, ${esc(u.raspador.ultimoErro.pais || '')} "${esc(u.raspador.ultimoErro.termo || '')}"): <span class="mut">${esc(u.raspador.ultimoErro.erro || '')}</span></p>` : '<p class="peq mut" style="margin-bottom:0">Nenhum erro registrado.</p>'}</div></div>
+    <div><div class="secao-cab"><h2>Últimas execuções do robô</h2></div><div class="painel-box rolar">${tabela('tbExec', u.raspador.execucoes, [
+      ['Onde', (e) => esc(e.origem)], ['Tarefa', (e) => esc(e.tipo)], ['Início', (e) => quando(e.inicio)],
+      ['Duração', (e) => (e.fim ? Math.max(1, Math.round((e.fim - e.inicio) / 60)) + ' min' : 'rodando'), null, 'dir'],
+      ['Páginas', (e) => fmt(e.coletas), null, 'dir'], ['Status', (e) => `<span class="tag ${e.status === 'ok' ? 'st-validando' : e.status === 'erro' ? 'st-forte' : ''}">${esc(e.status)}</span>`]], {})}</div></div>
+  </div>
+  <div class="grade-2 secao">
+    <div><div class="secao-cab"><h2>Maiores tabelas</h2></div><div class="painel-box rolar">${u.tabelas.length ? tabela('tbTab', u.tabelas, [['Tabela', (t) => esc(t.tabela)], ['Tamanho', (t) => fmtBytes(t.bytes), null, 'dir']], {}) : '<div class="vazio">Disponível com o banco na nuvem.</div>'}</div></div>
+    <div><div class="secao-cab"><h2>Cotas de IA (hoje)</h2></div><div class="painel-box pb-corpo" style="padding:14px 16px">${u.ia.length ? u.ia.map((x) => `<div>${esc(x.chave)}: ${fmt(x.hoje)}</div>`).join('') : '<span class="mut">As funções de IA chegam na Fase 5. Sem chave, elas mostram o prompt pronto para copiar.</span>'}</div></div>
+  </div>`;
+};
+
 // ---------- navegação ----------
 async function carregarPaises() {
   try { PAISES_COM_DADOS = await api('/api/paises'); } catch { PAISES_COM_DADOS = []; }
@@ -731,7 +797,17 @@ async function rota() {
 window.addEventListener('hashchange', () => { rota(); window.scrollTo(0, 0); });
 (async () => {
   $('#btFechar').innerHTML = ic('fechar');
+  $('#btSair').innerHTML = ic('sair');
+  $('#btSair').onclick = sair;
   desenharTema();
+  const pub = await fetch('/api/publico/config').then((r) => r.json()).catch(() => ({ auth: false }));
+  if (pub.auth && window.supabase) {
+    SB = window.supabase.createClient(pub.supabaseUrl, pub.anonKey, { auth: { persistSession: true, detectSessionInUrl: true } });
+    const { data } = await SB.auth.getSession();
+    if (!data.session) return telaLogin();
+    $('#btSair').hidden = false;
+    $('#btSair').title = 'Sair (' + (data.session.user.email || '') + ')';
+  }
   CONFIG = await api('/api/config');
   await carregarPaises();
   rota();

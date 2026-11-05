@@ -1,0 +1,54 @@
+# Manutenção do Minerador (sem navegador, ~1 min por execução):
+# - a cada push que muda o banco: aplica as migrações versionadas (src/migracoes.js);
+# - todo dia: migração + retenção (500 MB), limpeza de miniaturas (1 GB), alertas de limite e "toque" no banco
+#   (o Supabase Free pausa projetos sem uso por 7 dias);
+# - toda segunda: commit de batimento, para o GitHub não desativar os agendamentos após 60 dias sem atividade.
+name: manutencao
+
+on:
+  push:
+    branches: [main]
+    paths: ['src/migracoes.js', 'src/banco.js']
+  schedule:
+    - cron: '40 6 * * *'   # todo dia, 3h40 (Brasília)
+    - cron: '0 12 * * 1'   # toda segunda, 9h (Brasília): batimento
+  workflow_dispatch:
+
+concurrency:
+  group: minerador        # nunca roda junto com o robô (evita disputa de bloqueio no banco)
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  manutencao:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Migrar banco
+        run: node --no-warnings src/migrar.js
+      - name: Retenção e alertas
+        if: github.event_name != 'push'
+        run: node --no-warnings src/tarefa.js manutencao
+      - name: Batimento semanal
+        if: github.event.schedule == '0 12 * * 1'
+        run: |
+          date -u +%Y-%m-%dT%H:%M:%SZ > .github/batimento.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/batimento.txt
+          git commit -m "Batimento semanal (mantém os agendamentos ativos)"
+          git push

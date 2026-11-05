@@ -182,3 +182,14 @@ pre.prompt { white-space: pre-wrap; background: var(--sup2); border: 1px solid v
   #topo { flex-wrap: wrap; height: auto; padding: 8px 12px; } main { padding: 14px 12px 50px; }
   .kpi { border-right: 0; border-bottom: 1px solid var(--borda); }
 }
+
+/* login */
+body.sem-acesso #menu, body.sem-acesso #topo { display: none; }
+.login { min-height: 90vh; display: grid; place-items: center; }
+.login .painel-box { width: min(420px, 94vw); }
+.login h1 { margin: 14px 0 4px; font-size: 20px; }
+.marca-login { display: flex; gap: 9px; align-items: center; font-weight: 700; font-size: 15px; }
+.marca-login .logo { width: 26px; height: 26px; border-radius: 6px; background: var(--txt); color: var(--sup); display: grid; place-items: center; font-size: 13px; font-weight: 800; }
+.login-form { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.login-form input { width: 100%; }
+.aviso-erro { background: var(--erro-s); color: var(--erro); border-radius: 6px; padding: 8px 10px; font-size: 13px; margin-top: 10px; }

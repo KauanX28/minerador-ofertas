@@ -11,8 +11,8 @@ const { iniciar, tx, fechar } = await import('./banco.js'); // usa Postgres por 
 await iniciar();
 
 const TABELAS = {
-  paginas: 'page_id', anuncios: 'ad_id', historico: 'page_id, pais, data', checkouts: 'checkout',
-  analises: 'dominio', favoritos: 'tipo, chave', ajustes: 'chave',
+  paginas: 'page_id', anuncios: 'ad_id', historico_diario: 'page_id, pais, data', checkouts: 'checkout',
+  analises: 'dominio', favoritos: 'user_id, tipo, chave', ajustes: 'chave',
 };
 for (const [tabela, chave] of Object.entries(TABELAS)) {
   const linhas = local.prepare(`SELECT * FROM ${tabela}`).all();

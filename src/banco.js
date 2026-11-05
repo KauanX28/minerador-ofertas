@@ -1,43 +1,18 @@
 // Camada de banco: SQLite local (padrão) ou Postgres/Supabase quando DATABASE_URL estiver definida.
 // As consultas são escritas uma vez, com `?` como parâmetro; aqui elas são adaptadas para cada banco.
+// O esquema evolui por migrações versionadas (src/migracoes.js), aplicadas só pelo robô/terminal:
+// a função da Vercel nunca roda DDL (ALTER/CREATE pedem bloqueio exclusivo e travariam o painel).
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { MIGRACOES } from './migracoes.js';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // DATABASE_URL (GitHub Actions / manual) ou POSTGRES_URL (integração Supabase da Vercel).
 const URL_BANCO = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 export const usaPostgres = !!URL_BANCO;
-
-const ESQUEMA = (pg) => `
-CREATE TABLE IF NOT EXISTS anuncios (
-  ad_id TEXT PRIMARY KEY, page_id TEXT, page_name TEXT, ativo INTEGER, inicio BIGINT, fim BIGINT,
-  dup INTEGER, plataformas TEXT, formato TEXT, texto TEXT, titulo TEXT, link TEXT, dominio TEXT,
-  cta TEXT, thumb TEXT, video TEXT, gateway TEXT, checkout TEXT, visto_primeiro BIGINT, visto_ultimo BIGINT, pais TEXT
-);
-CREATE INDEX IF NOT EXISTS ix_anuncios_page ON anuncios(page_id);
-CREATE TABLE IF NOT EXISTS paginas (
-  page_id TEXT PRIMARY KEY, nome TEXT, uri TEXT, foto TEXT, curtidas INTEGER, categorias TEXT,
-  nichos TEXT DEFAULT '[]', palavras TEXT DEFAULT '[]', atualizado BIGINT, paises TEXT DEFAULT '[]'
-);
-CREATE TABLE IF NOT EXISTS historico (page_id TEXT, pais TEXT, data TEXT, ativos INTEGER, PRIMARY KEY (page_id, pais, data));
-CREATE TABLE IF NOT EXISTS buscas (
-  id ${pg ? 'BIGSERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'}, palavra TEXT, nicho TEXT, pais TEXT,
-  total INTEGER, coletados INTEGER, quando BIGINT
-);
-CREATE TABLE IF NOT EXISTS checkouts (
-  checkout TEXT PRIMARY KEY, gateway TEXT, url TEXT, produto TEXT, preco TEXT, analisado BIGINT, ok INTEGER
-);
-CREATE TABLE IF NOT EXISTS analises (dominio TEXT PRIMARY KEY, url TEXT, dados TEXT, quando BIGINT);
-CREATE TABLE IF NOT EXISTS favoritos (
-  tipo TEXT, chave TEXT, nome TEXT, nota TEXT DEFAULT '', criado BIGINT, PRIMARY KEY (tipo, chave)
-);
-CREATE TABLE IF NOT EXISTS ajustes (chave TEXT PRIMARY KEY, valor TEXT);
-CREATE TABLE IF NOT EXISTS fila (
-  id ${pg ? 'BIGSERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'}, tipo TEXT, args TEXT, descricao TEXT,
-  status TEXT DEFAULT 'pendente', log TEXT DEFAULT '', criado BIGINT, inicio BIGINT, fim BIGINT
-);
-`;
+export const naVercel = !!process.env.VERCEL;
+export const VERSAO_ESQUEMA = MIGRACOES.at(-1).versao;
 
 let impl;
 
@@ -68,20 +43,9 @@ if (usaPostgres) {
   impl = {
     ...fazer(sql, true),
     tx: (fn) => sql.begin((t) => fn(fazer(t))),
-    iniciar: async () => {
-      // Se o esquema já existe, não roda DDL: ALTER/CREATE pedem bloqueio exclusivo e ficariam esperando
-      // as gravações do robô (o painel travava com timeout enquanto o robô rodava).
-      const [{ pronto }] = await sql`SELECT to_regclass('public.fila') IS NOT NULL AND to_regclass('public.ix_anuncios_gw') IS NOT NULL AS pronto`;
-      if (pronto) return;
-      await sql.unsafe('SET lock_timeout = 5000');
-      await sql.unsafe(ESQUEMA(true));
-      await sql.unsafe('CREATE INDEX IF NOT EXISTS ix_anuncios_gw ON anuncios(gateway, checkout, pais)');
-      // No Supabase, tabelas do schema public ficam expostas pela API pública: RLS ligado e sem políticas
-      // bloqueia esse acesso (o painel conecta direto no Postgres e não é afetado).
-      for (const t of ['anuncios', 'paginas', 'historico', 'buscas', 'checkouts', 'analises', 'favoritos', 'ajustes', 'fila']) {
-        await sql.unsafe(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY`);
-      }
-    },
+    ddl: (texto) => emFila(() => sql.unsafe(texto)),
+    colunas: async (t) => (await sql`SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = ${t}`).map((r) => r.column_name),
+    existe: async (t) => (await sql`SELECT to_regclass(${'public.' + t}) IS NOT NULL AS e`)[0].e,
     fechar: () => sql.end({ timeout: 5 }),
   };
 } else {
@@ -103,25 +67,41 @@ if (usaPostgres) {
       db.exec('BEGIN');
       try { const r = await fn(ops); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; }
     },
-    iniciar: async () => {
-      db.exec(ESQUEMA(false));
-      // Migrações de bancos antigos (antes da separação por país, tudo era Brasil).
-      const cols = (t) => db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name);
-      for (const c of ['gateway', 'checkout', 'pais']) if (!cols('anuncios').includes(c)) db.exec(`ALTER TABLE anuncios ADD COLUMN ${c} TEXT`);
-      if (!cols('paginas').includes('paises')) db.exec("ALTER TABLE paginas ADD COLUMN paises TEXT DEFAULT '[]'");
-      if (!cols('historico').includes('pais')) {
-        db.exec(`ALTER TABLE historico RENAME TO historico_antigo;
-          CREATE TABLE historico (page_id TEXT, pais TEXT, data TEXT, ativos INTEGER, PRIMARY KEY (page_id, pais, data));
-          INSERT INTO historico SELECT page_id, 'BR', data, ativos FROM historico_antigo; DROP TABLE historico_antigo;
-          UPDATE anuncios SET pais = 'BR' WHERE pais IS NULL;
-          UPDATE paginas SET paises = '["BR"]' WHERE paises IS NULL OR paises = '[]';`);
-      }
-      db.exec('DROP INDEX IF EXISTS ix_anuncios_gateway; CREATE INDEX IF NOT EXISTS ix_anuncios_gw ON anuncios(gateway, checkout, pais)');
-    },
+    ddl: async (texto) => { cache.clear(); db.exec(texto); },
+    colunas: async (t) => db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name),
+    existe: async (t) => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t),
     fechar: async () => db.close(),
   };
 }
 
 export const { all, get, run, tx, fechar } = impl;
+
+// Aplica as migrações pendentes, em ordem, registrando cada uma em schema_migracoes.
+export async function migrar({ log = () => {} } = {}) {
+  const { ddl, existe, colunas } = impl;
+  const ctx = { pg: usaPostgres, ddl, existe, colunas, all, get, run, tx };
+  if (usaPostgres) await ddl("SET lock_timeout = '20s'");
+  await ddl(`CREATE TABLE IF NOT EXISTS schema_migracoes (versao INTEGER PRIMARY KEY, nome TEXT, aplicada BIGINT)`);
+  if (usaPostgres) await ddl('ALTER TABLE schema_migracoes ENABLE ROW LEVEL SECURITY');
+  const feitas = new Set((await all('SELECT versao FROM schema_migracoes')).map((r) => r.versao));
+  let n = 0;
+  for (const m of MIGRACOES) {
+    if (feitas.has(m.versao)) continue;
+    log(`> Migração ${m.versao}: ${m.nome}`);
+    await m.up(ctx);
+    await run('INSERT INTO schema_migracoes (versao, nome, aplicada) VALUES (?, ?, ?)', [m.versao, m.nome, Math.floor(Date.now() / 1000)]);
+    n++;
+  }
+  return n;
+}
+
+// Na Vercel só confere a versão (sem DDL). No robô e no modo local, aplica o que faltar.
 let pronto;
-export const iniciar = () => (pronto ||= impl.iniciar());
+export const iniciar = () => (pronto ||= (async () => {
+  if (naVercel) {
+    const v = await get('SELECT MAX(versao) v FROM schema_migracoes').catch(() => null);
+    if (!v || v.v < VERSAO_ESQUEMA) throw new Error(`Banco na versão ${v?.v ?? 0}, código espera ${VERSAO_ESQUEMA}: rode o workflow "manutencao" (migração).`);
+    return;
+  }
+  await migrar();
+})());

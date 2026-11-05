@@ -113,7 +113,40 @@ function anunciosDaConexao(con, mapa) {
   }
 }
 
-async function abrir(ctx, url, { rolagens = 0, maxAnuncios = Infinity, log = () => {} } = {}) {
+// Erro de estrutura: a página abriu, mas sem os dados esperados (a Meta mudou o site ou bloqueou).
+export class EstruturaError extends Error {}
+
+// Limite de páginas abertas por execução (protege contra bloqueio e contra gastar minutos à toa).
+const LIMITE_PAGINAS = Number(process.env.LIMITE_PAGINAS_EXECUCAO || 600);
+export const estatisticas = { paginas: 0, erros: 0, coletas: [] };
+let aoColetar = null;
+export const registrarColetas = (fn) => { aoColetar = fn; };
+
+// Abre com retentativas e recuo progressivo (30 s, 90 s) em falhas de rede ou estrutura.
+async function abrir(ctx, url, opcoes = {}, meta = {}) {
+  const inicio = Date.now();
+  let ultimo;
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
+    if (estatisticas.paginas >= LIMITE_PAGINAS) throw new BloqueioError(`Limite de ${LIMITE_PAGINAS} páginas por execução atingido.`);
+    estatisticas.paginas++;
+    try {
+      const r = await abrirUmaVez(ctx, url, opcoes);
+      const status = r.total === 0 ? 'vazio' : 'ok';
+      await aoColetar?.({ ...meta, total: r.total, lidos: r.anuncios.length, status, duracao_ms: Date.now() - inicio });
+      return r;
+    } catch (e) {
+      ultimo = e;
+      if (e instanceof BloqueioError) break;
+      const recuo = [30000, 90000][tentativa];
+      if (recuo) { (opcoes.log || (() => {}))(`   ! ${e.message.slice(0, 120)} — nova tentativa em ${recuo / 1000}s`); await espera(recuo + aleatorio(0, 5000)); }
+    }
+  }
+  estatisticas.erros++;
+  await aoColetar?.({ ...meta, total: null, lidos: 0, status: 'erro', erro: String(ultimo?.message || ultimo).slice(0, 300), duracao_ms: Date.now() - inicio });
+  throw ultimo;
+}
+
+async function abrirUmaVez(ctx, url, { rolagens = 0, maxAnuncios = Infinity, log = () => {} } = {}) {
   const page = await ctx.newPage();
   const mapa = new Map();
   const pendentes = [];
@@ -132,7 +165,8 @@ async function abrir(ctx, url, { rolagens = 0, maxAnuncios = Infinity, log = () 
       throw new BloqueioError('A Meta pediu captcha. Rode com --visivel e resolva no navegador, ou espere algumas horas.');
     }
     const con = extrairConexaoDoHtml(html);
-    const total = con?.count ?? null;
+    if (!con) throw new EstruturaError('HTML sem search_results_connection (a Meta pode ter mudado a página ou bloqueado o acesso)');
+    const total = con.count ?? null;
     anunciosDaConexao(con, mapa);
 
     let semNovos = 0;
@@ -158,7 +192,7 @@ export async function buscarPalavra(ctx, palavra, { pais = 'BR', maxAnuncios = 1
     active_status: 'active', ad_type: 'all', country: pais, is_targeted_country: 'false',
     media_type: 'all', q: palavra, search_type: 'keyword_unordered',
   });
-  return abrir(ctx, `${BASE}?${q}`, { rolagens: Math.ceil(maxAnuncios / 10) + 2, maxAnuncios, log });
+  return abrir(ctx, `${BASE}?${q}`, { rolagens: Math.ceil(maxAnuncios / 10) + 2, maxAnuncios, log }, { tipo: 'palavra', termo: palavra, pais });
 }
 
 // Todos os anúncios ativos de uma página (anunciante). `total` = nº de anúncios ativos.
@@ -167,7 +201,7 @@ export async function buscarPagina(ctx, pageId, { pais = 'BR', rolagens = 1 } = 
     active_status: 'active', ad_type: 'all', country: pais, is_targeted_country: 'false',
     media_type: 'all', search_type: 'page', view_all_page_id: pageId,
   });
-  return abrir(ctx, `${BASE}?${q}`, { rolagens });
+  return abrir(ctx, `${BASE}?${q}`, { rolagens }, { tipo: 'pagina', termo: pageId, pais });
 }
 
 export const pausa = () => espera(aleatorio(2000, 4500));

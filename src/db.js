@@ -31,7 +31,8 @@ INSERT INTO anuncios (ad_id, page_id, page_name, ativo, inicio, fim, dup, plataf
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(ad_id) DO UPDATE SET ativo=excluded.ativo, fim=excluded.fim, dup=excluded.dup,
   thumb=COALESCE(excluded.thumb, anuncios.thumb), video=COALESCE(excluded.video, anuncios.video),
-  page_name=excluded.page_name, visto_ultimo=excluded.visto_ultimo`;
+  page_name=excluded.page_name, visto_ultimo=excluded.visto_ultimo,
+  inativo_desde=CASE WHEN excluded.ativo = 1 THEN NULL ELSE anuncios.inativo_desde END`;
 
 const SQL_PAGINA = `
 INSERT INTO paginas (page_id, nome, uri, foto, curtidas, categorias, nichos, palavras, atualizado, paises)
@@ -52,18 +53,30 @@ export async function salvarAnuncios(anuncios, { nicho, palavra, pais } = {}) {
   if (!pais) throw new Error('salvarAnuncios precisa do país');
   const t = agora();
   const porPagina = new Map();
-  for (const a of anuncios) if (!porPagina.has(a.page_id)) porPagina.set(a.page_id, a);
+  const porAnuncio = new Map();
+  for (const a of anuncios) { if (!porPagina.has(a.page_id)) porPagina.set(a.page_id, a); porAnuncio.set(a.ad_id, a); }
+  // Gravação em lote: um INSERT com várias linhas (poucas idas ao banco, transação curta).
+  const lote = (sqlBase, linhas) => {
+    const n = linhas[0].length;
+    const valores = linhas.map(() => `(${Array(n).fill('?').join(', ')})`).join(', ');
+    return [sqlBase.replace(/VALUES \([^)]*\)/, 'VALUES ' + valores), linhas.flat()];
+  };
+  const ids = [...porPagina.keys()];
+  const atuais = new Map((await all(`SELECT page_id, nichos, palavras, paises FROM paginas WHERE page_id IN (${ids.map(() => '?').join(', ')})`, ids))
+    .map((r) => [r.page_id, r]));
+  const linhasAds = [...porAnuncio.values()].map((a) => {
+    const g = detectarGateway(a.link);
+    return [a.ad_id, a.page_id, a.page_name, a.ativo, a.inicio, a.fim, a.dup, a.plataformas, a.formato,
+      a.texto, a.titulo, a.link, a.dominio, a.cta, a.thumb, a.video, g?.gateway ?? null, g?.checkout ?? null, t, t, pais];
+  });
+  const linhasPags = [...porPagina.values()].map((a) => {
+    const at = atuais.get(a.page_id);
+    return [a.page_id, a.page_name, a.pagina.uri, a.pagina.foto, a.pagina.curtidas, a.pagina.categorias,
+      juntar(at?.nichos, nicho), juntar(at?.palavras, palavra), t, juntar(at?.paises, pais)];
+  });
   await tx(async (db) => {
-    for (const a of anuncios) {
-      const g = detectarGateway(a.link);
-      await db.run(SQL_ANUNCIO, [a.ad_id, a.page_id, a.page_name, a.ativo, a.inicio, a.fim, a.dup, a.plataformas, a.formato,
-        a.texto, a.titulo, a.link, a.dominio, a.cta, a.thumb, a.video, g?.gateway ?? null, g?.checkout ?? null, t, t, pais]);
-    }
-    for (const a of porPagina.values()) {
-      const atual = await db.get('SELECT nichos, palavras, paises FROM paginas WHERE page_id = ?', [a.page_id]);
-      await db.run(SQL_PAGINA, [a.page_id, a.page_name, a.pagina.uri, a.pagina.foto, a.pagina.curtidas, a.pagina.categorias,
-        juntar(atual?.nichos, nicho), juntar(atual?.palavras, palavra), t, juntar(atual?.paises, pais)]);
-    }
+    for (let i = 0; i < linhasAds.length; i += 200) await db.run(...lote(SQL_ANUNCIO, linhasAds.slice(i, i + 200)));
+    for (let i = 0; i < linhasPags.length; i += 200) await db.run(...lote(SQL_PAGINA, linhasPags.slice(i, i + 200)));
   });
 }
 
@@ -72,11 +85,14 @@ export async function marcarInativos(pageId, pais, idsAtivos) {
   const ids = new Set(idsAtivos);
   const rows = await all('SELECT ad_id FROM anuncios WHERE page_id = ? AND pais = ? AND ativo = 1', [pageId, pais]);
   const sair = rows.filter((r) => !ids.has(r.ad_id));
-  if (sair.length) await tx(async (db) => { for (const r of sair) await db.run('UPDATE anuncios SET ativo = 0 WHERE ad_id = ?', [r.ad_id]); });
+  if (sair.length) {
+    await run(`UPDATE anuncios SET ativo = 0, inativo_desde = ? WHERE ad_id IN (${sair.map(() => '?').join(', ')})`,
+      [agora(), ...sair.map((r) => r.ad_id)]);
+  }
 }
 
 export const salvarHistorico = (pageId, pais, ativos) => run(
-  'INSERT INTO historico (page_id, pais, data, ativos) VALUES (?, ?, ?, ?) ON CONFLICT(page_id, pais, data) DO UPDATE SET ativos = excluded.ativos',
+  'INSERT INTO historico_diario (page_id, pais, data, ativos) VALUES (?, ?, ?, ?) ON CONFLICT(page_id, pais, data) DO UPDATE SET ativos = excluded.ativos',
   [pageId, pais, hoje(), ativos]);
 
 export const salvarBusca = ({ palavra, nicho, pais, total, coletados }) => run(
