@@ -131,7 +131,7 @@ async function enriquecerDominios(ctx, o, { limite = 6, minAnuncios = 8 } = {}) 
   const candidatos = await all(`SELECT a.dominio, COUNT(*) n FROM anuncios a
     JOIN (SELECT page_id, MAX(ativos) m FROM historico_diario WHERE pais = ? GROUP BY page_id) h ON h.page_id = a.page_id
     JOIN paginas p ON p.page_id = a.page_id
-    WHERE a.ativo = 1 AND a.pais = ? AND a.dominio IS NOT NULL AND h.m >= ? AND COALESCE(p.tipo, 'indefinido') NOT IN ('marca', 'app', 'fisico', 'local')
+    WHERE a.ativo = 1 AND a.pais = ? AND a.dominio IS NOT NULL AND h.m >= ? AND COALESCE(p.tipo, 'indefinido') NOT IN ('marca', 'app', 'fisico', 'local', 'conversa')
     GROUP BY a.dominio ORDER BY COUNT(*) DESC LIMIT 60`, [o.pais, o.pais, minAnuncios]);
   const bloqueio = ((await lerConfig()).bloqueio || []).map((b) => b.toLowerCase().replace(/\s+/g, ''));
   const bloqueado = (d) => bloqueio.some((b) => d.toLowerCase().replace(/[^a-z0-9]/g, '').includes(b.replace(/[^a-z0-9]/g, '')));

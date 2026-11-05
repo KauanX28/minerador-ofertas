@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  paisesComDados, rankingPaginas, rankingDominios, rankingGateway, resumoGateways, detalhePagina, painelGeral, listaAnalises, listaFavoritos,
+  paisesComDados, rankingPaginas, recomendavel, notaRecomendacao, rankingDominios, rankingGateway, resumoGateways, detalhePagina, painelGeral, listaAnalises, listaFavoritos,
 } from './score.js';
 import { all, get, run, iniciar, agora, lerAnalise, lerConfig, salvarConfig } from './db.js';
 import { GATEWAYS, linksExternos, hostDe } from './util.js';
@@ -27,7 +27,8 @@ function filtrarRanking(lista, q) {
     && (!sim(q.vsl) || x.temVsl) && (!sim(q.quiz) || x.temQuiz) && (!sim(q.checkout) || x.checkoutConhecido) && (!sim(q.plr) || x.plr)
     && (!sim(q.acelerando) || ['Nova acelerando', 'Escalando agora'].includes(x.status)) && (!sim(q.gringa) || x.semEquivalenteBR)
     && (!busca || [x.nome, x.produto, ...(x.dominios || [])].join(' ').toLowerCase().includes(busca)));
-  r = r.sort(ORDENS[q.ordem] || ORDENS.score);
+  if (q.ordem === 'oportunidade') r = r.filter(recomendavel);
+  r = r.sort(q.ordem === 'oportunidade' ? (a, b) => notaRecomendacao(b) - notaRecomendacao(a) : ORDENS[q.ordem] || ORDENS.score);
   if (q.ids) { const ids = String(q.ids).split(','); r = lista.filter((x) => ids.includes(x.page_id)); }
   const por = Math.min(Math.max(Number(q.por || 48), 1), 200), pagina = Math.max(Number(q.pagina || 1), 1);
   return { total: r.length, pagina, por, itens: r.slice((pagina - 1) * por, pagina * por) };

@@ -4,7 +4,7 @@
 // Telegram e relatório semanal.
 import { all, get, run, agora, lerConfig } from './db.js';
 import { alertar } from './alerta.js';
-import { rankingPaginas } from './score.js';
+import { rankingPaginas, recomendavel, notaRecomendacao } from './score.js';
 
 // ---------- Web Push (chaves VAPID geradas uma vez e guardadas no banco: nada para configurar) ----------
 async function webpush() { try { return (await import('web-push')).default; } catch { return null; } }
@@ -94,7 +94,7 @@ export async function ofertasDoDia({ pais = 'BR', log = () => {}, url = process.
   const canal = process.env.TELEGRAM_CANAL_ID, token = process.env.TELEGRAM_BOT_TOKEN;
   const hoje = new Date().toISOString().slice(0, 10);
   if (!canal || !token || (await jaAvisado(`canal:${pais}:${hoje}`))) return false;
-  const top = (await rankingPaginas({ pais, tipo: 'low' })).filter((p) => p.status !== 'Teste').sort((a, b) => b.oportunidade - a.oportunidade).slice(0, 5);
+  const top = (await rankingPaginas({ pais, tipo: 'low' })).filter(recomendavel).sort((a, b) => notaRecomendacao(b) - notaRecomendacao(a)).slice(0, 5);
   if (!top.length) return false;
   const texto = `🔥 Ofertas low ticket do dia (${pais})\n\n` + top.map((p, i) => `${i + 1}. ${p.nome}: ${p.ativos} anúncios, ${p.dias} dias${p.preco ? ', ' + p.preco : ''}${p.var7 ? `, ${p.var7 > 0 ? '+' : ''}${p.var7} em 7 dias` : ''}${url ? `\n${url}/oferta/${p.page_id}` : ''}`).join('\n\n');
   const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: canal, text: texto, disable_web_page_preview: true }) });
@@ -114,7 +114,7 @@ export async function relatorio({ pais = 'BR' } = {}) {
     novas: lista.filter((p) => p.dias <= 7 && p.ativos >= 10).sort((a, b) => b.ativos - a.ativos).slice(0, 10).map(fmtP),
     altas: lista.filter((p) => (p.var7 ?? 0) > 0).sort((a, b) => b.var7 - a.var7).slice(0, 10).map(fmtP),
     caindo: lista.filter((p) => p.status === 'Saturando/caindo').slice(0, 10).map(fmtP),
-    melhoresParaModelar: [...lista].filter((p) => p.status !== 'Teste').sort((a, b) => b.oportunidade - a.oportunidade).slice(0, 10).map(fmtP),
+    melhoresParaModelar: lista.filter(recomendavel).sort((a, b) => notaRecomendacao(b) - notaRecomendacao(a)).slice(0, 10).map(fmtP),
     seguidos: lista.filter((p) => seguidos.has(p.page_id)).map(fmtP),
     robo: Object.fromEntries(exec.map((e) => [e.status, Number(e.n)])),
   };

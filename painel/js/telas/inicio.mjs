@@ -37,7 +37,7 @@ export function TelaInicio() {
     <section class="secao"><div class="secao-cab"><h2>Melhores para modelar hoje</h2><a class="peq" href="/ofertas?ordem=oportunidade">Ver todas</a></div>
       ${semNicho && todos.dados?.itens?.length ? html`<p class="mut peq" style="margin-top:-4px">Seus nichos ainda não têm ofertas coletadas em ${nomePais(l.pais)}; mostrando todos. O robô inclui seus nichos no rodízio.</p>` : null}
       ${paraVoce.carregando ? html`<${Esqueleto} cards=${6} />` : paraVoce.dados?.itens?.length ? html`<div class="feed">${paraVoce.dados.itens.map((p) => html`<${CartaoOferta} p=${p} />`)}</div>`
-        : html`<${Vazio} titulo="Ainda sem ofertas neste país" texto="O robô coleta 4 vezes por dia. Você também pode pedir uma coleta agora." acao="Minerar agora" href="/minerar" />`}</section>
+        : html`<${Vazio} titulo="Nenhuma oferta validada para modelar ainda" texto="Aqui só entram ofertas low ticket com 8+ anúncios, fora de teste e com página de vendas. O robô está buscando: elas aparecem conforme ele encontra." acao="Ver todas as ofertas" href="/ofertas" />`}</section>
     <section class="secao"><div class="secao-cab"><h2>Novas acelerando</h2><a class="peq" href="/ofertas?acelerando=1">Ver todas</a></div>
       ${acelerando.carregando ? html`<${Esqueleto} cards=${3} />` : acelerando.dados?.itens?.length ? html`<div class="feed">${acelerando.dados.itens.map((p) => html`<${CartaoOferta} p=${p} />`)}</div>`
         : html`<div class="painel-box vazio peq">Nenhuma oferta nova acelerando agora. Esta lista se preenche sozinha conforme o robô reconta os anunciantes todo dia.</div>`}</section>`;

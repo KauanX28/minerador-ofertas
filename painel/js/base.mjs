@@ -132,7 +132,7 @@ export const PAISES = [['BR', 'Brasil'], ['PT', 'Portugal'], ['MX', 'México'], 
   ['IT', 'Itália'], ['FR', 'França'], ['DE', 'Alemanha'], ['NL', 'Holanda'], ['BE', 'Bélgica'], ['CH', 'Suíça'], ['PL', 'Polônia']];
 export const nomePais = (c) => PAISES.find(([k]) => k === c)?.[1] || c;
 export const TIPOS_OFERTA = { low: 'Low ticket', info_alto: 'Infoproduto médio/alto', app: 'App / assinatura', fisico: 'Produto físico',
-  lancamento: 'Lançamento / evento', local: 'Negócio local', marca: 'Marca grande', indefinido: 'Sem classificação' };
+  lancamento: 'Lançamento / evento', local: 'Negócio local', conversa: 'Venda por conversa (WhatsApp/Direct)', marca: 'Marca grande', indefinido: 'Sem classificação' };
 export const STATUS = { 'Nova acelerando': 'st-nova', 'Escalada forte': 'st-forte', 'Escalada': 'st-escalada', 'Escalando agora': 'st-agora',
   'Validando': 'st-validando', 'Saturando/caindo': 'st-caindo', 'Teste': '' };
 export const ETAPAS = [['minerada', 'Minerada'], ['validando', 'Validando'], ['modelando', 'Modelando'], ['testando', 'Testando'], ['escalando', 'Escalando'], ['descartada', 'Descartada']];

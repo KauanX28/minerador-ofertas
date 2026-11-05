@@ -10,6 +10,7 @@ export const TIPOS = {
   fisico: 'E-commerce físico',
   lancamento: 'Lançamento / evento',
   local: 'Negócio local',
+  conversa: 'Venda por conversa (WhatsApp/Direct)',
   marca: 'Marca grande',
   indefinido: 'Indefinido',
 };
@@ -101,12 +102,17 @@ export function classificar({ nome = '', categorias = '', curtidas = 0, anuncios
   const bloq = bloqueio.find((b) => b && (nomeL.includes(b.toLowerCase()) || hosts.some((h) => h.includes(b.toLowerCase()))));
   if (bloq) return { tipo: 'marca', motivo: `lista de bloqueio: ${bloq}`, bloqueado: true };
 
-  const pts = { low: 0, info_alto: 0, app: 0, fisico: 0, lancamento: 0, local: 0, marca: 0 };
-  const porque = { low: [], app: [], fisico: [], lancamento: [], local: [], marca: [] };
+  const pts = { low: 0, info_alto: 0, app: 0, fisico: 0, lancamento: 0, local: 0, marca: 0, conversa: 0 };
+  const porque = { low: [], app: [], fisico: [], lancamento: [], local: [], marca: [], conversa: [] };
   const soma = (t, n, m) => { pts[t] += n; if (m && porque[t].length < 3) porque[t].push(m); };
 
   const comGateway = anuncios.some((a) => a.gateway) || (analise?.checkouts || []).length > 0;
   if (comGateway) soma('low', 6, 'checkout de gateway de infoproduto');
+  // Anúncios que só levam para conversa (WhatsApp, Messenger, Direct) ou para o perfil: venda feita no chat, sem página nem checkout.
+  const RE_CONVERSA = /(wa\.me|whatsapp\.com|api\.whatsapp|m\.me\/|messenger\.com|instagram\.com|ig\.me|facebook\.com\/(?!ads))/;
+  const comDestino = anuncios.filter((a) => a.link || a.cta);
+  const paraConversa = comDestino.filter((a) => RE_CONVERSA.test(String(a.link || '').toLowerCase()) || /whatsapp|mensagem|message|conversa|direct|perfil do instagram|instagram profile/.test(String(a.cta || '').toLowerCase()));
+  if (!comGateway && comDestino.length && paraConversa.length / comDestino.length >= 0.6) soma('conversa', 8, `${paraConversa.length} de ${comDestino.length} anúncios levam para conversa ou perfil, sem página de vendas`);
   const info = tem(textos, P_INFO); if (info.length) soma('low', Math.min(info.length, 4), `texto: ${info.slice(0, 2).join(', ')}`);
   // Programas digitais com prazo ("desafio 21 dias", "método de 7 dias", "21d") e funis em rastreadores/quiz.
   if (/\b(desafio|m[eé]todo|programa|plano|protocolo|reto|challenge)\b[^.\n]{0,40}\b\d{1,3}\s?(d\b|dias|days|d[ií]as|semanas|weeks)/.test(textos) || /\b\d{1,3}d\b/.test(textos)) soma('low', 3, 'programa digital com prazo');

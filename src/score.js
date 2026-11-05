@@ -62,6 +62,11 @@ export function avaliar({ ativos = 0, dias = 0, dupMax = 1, crescimentoPct = nul
   return { score, status, oportunidade, motivoOport, fatores };
 }
 
+// Boa para recomendar como "melhor para modelar": já validada (não está em teste), com volume e vendável
+// (low ticket ou infoproduto, sem venda só por conversa). Quem tem checkout/preço conhecido vem antes.
+export const recomendavel = (p) => p.status !== 'Teste' && p.status !== 'Saturando/caindo' && p.ativos >= 8 && p.dias >= 3 && ['low', 'info_alto'].includes(p.tipo);
+export const notaRecomendacao = (p) => p.oportunidade + (p.checkoutConhecido ? 12 : 0) + (p.precoBrl != null ? 6 : 0);
+
 // Compatibilidade: telas que só têm números agregados (sites, checkouts).
 export const pontuar = (m) => avaliar(m).score;
 export const classificar = (m) => avaliar(m).status;
@@ -351,7 +356,7 @@ export async function painelGeral(pais = 'BR') {
     escalandoAgora: pags.filter((p) => ['Nova acelerando', 'Escalando agora'].includes(p.status)).slice(0, 6),
     top: pags.slice(0, 6),
     novas: pags.filter((p) => p.dias > 0 && p.dias <= 14 && p.ativos >= 10).sort((a, b) => (b.status === 'Nova acelerando') - (a.status === 'Nova acelerando')).slice(0, 6),
-    oportunidades: [...pags].filter((p) => p.status !== 'Teste').sort((a, b) => b.oportunidade - a.oportunidade).slice(0, 6),
+    oportunidades: pags.filter(recomendavel).sort((a, b) => notaRecomendacao(b) - notaRecomendacao(a)).slice(0, 6),
     ultimaBusca: ult.q, buscas7d: n7.n,
     gateways: gws.filter((g) => g.anuncios > 0).slice(0, 8),
     analises: nAn.n, favoritos: nFav.n, hoje: hoje(),
