@@ -62,6 +62,11 @@ if (usaPostgres) {
     ...fazer(sql),
     tx: (fn) => sql.begin((t) => fn(fazer(t))),
     iniciar: async () => {
+      // Se o esquema já existe, não roda DDL: ALTER/CREATE pedem bloqueio exclusivo e ficariam esperando
+      // as gravações do robô (o painel travava com timeout enquanto o robô rodava).
+      const [{ pronto }] = await sql`SELECT to_regclass('public.fila') IS NOT NULL AND to_regclass('public.ix_anuncios_gw') IS NOT NULL AS pronto`;
+      if (pronto) return;
+      await sql.unsafe('SET lock_timeout = 5000');
       await sql.unsafe(ESQUEMA(true));
       await sql.unsafe('CREATE INDEX IF NOT EXISTS ix_anuncios_gw ON anuncios(gateway, checkout, pais)');
       // No Supabase, tabelas do schema public ficam expostas pela API pública: RLS ligado e sem políticas

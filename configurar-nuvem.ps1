@@ -4,11 +4,21 @@
 #   2. grava DATABASE_URL na Vercel (painel online)
 #   3. copia para a nuvem os dados que você já minerou no computador
 #   4. republica o painel e dispara a primeira rodada do robô
-$ErrorActionPreference = 'Stop'
+#   Use -PularMigracao se os dados ja foram copiados.
+param([switch]$PularMigracao)
+$ErrorActionPreference = 'Continue'   # erros checados pelo $LASTEXITCODE de cada comando
 Set-Location $PSScriptRoot
 $repo = 'KauanX28/minerador-ofertas'
 $gh = 'C:\Program Files\GitHub CLI\gh.exe'
 $cfg = Join-Path $PSScriptRoot '.vercel-cli'
+
+# Login no GitHub nesta janela (se ainda nao estiver logado).
+$null = & $gh auth status 2>&1
+if ($LASTEXITCODE -ne 0) {
+  Write-Host 'Entre na sua conta do GitHub (vai abrir o navegador com um codigo):' -ForegroundColor Cyan
+  & $gh auth login --hostname github.com --git-protocol https --web --scopes workflow
+  if ($LASTEXITCODE -ne 0) { throw 'Login no GitHub nao concluido.' }
+}
 
 Write-Host ''
 Write-Host 'Supabase > projeto minerador-ofertas > botao Connect > aba "Transaction pooler" (porta 6543).' -ForegroundColor Cyan
@@ -18,10 +28,12 @@ $url = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServic
 if ($url -notmatch '^postgres(ql)?://') { throw 'A URL precisa comecar com postgresql://' }
 if ($url -match '\[YOUR-PASSWORD\]') { throw 'Troque [YOUR-PASSWORD] pela senha do banco antes de colar.' }
 
-Write-Host "`n[1/4] Testando a conexao e copiando os dados locais para a nuvem..." -ForegroundColor Yellow
 $env:DATABASE_URL = $url
-node --no-warnings src/migrar-para-nuvem.js
-if ($LASTEXITCODE -ne 0) { throw 'Nao consegui conectar no banco. Confira a URL e a senha.' }
+if (-not $PularMigracao) {
+  Write-Host "`n[1/4] Testando a conexao e copiando os dados locais para a nuvem..." -ForegroundColor Yellow
+  node --no-warnings src/migrar-para-nuvem.js
+  if ($LASTEXITCODE -ne 0) { throw 'Nao consegui conectar no banco. Confira a URL e a senha.' }
+} else { Write-Host "`n[1/4] Dados ja copiados, pulando." -ForegroundColor Yellow }
 
 Write-Host "`n[2/4] Gravando o segredo DATABASE_URL no GitHub..." -ForegroundColor Yellow
 $url | & $gh secret set DATABASE_URL --repo $repo
