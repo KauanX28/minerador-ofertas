@@ -105,6 +105,11 @@ Sem nenhuma chave, tudo funciona: cada função de IA mostra o prompt pronto par
 - Também dá para salvar uma chave só no navegador, em Configurações → IA. Ela não vai para o servidor.
 - Uma vez por dia, o robô transcreve e analisa o criativo campeão das 20 melhores ofertas, dentro da cota grátis.
 
+### Escalar com dados reais (opcional)
+
+- **Anúncios:** crie um app em https://developers.facebook.com/apps (tipo "Empresa", pode ficar em modo de desenvolvimento), adicione "API de Marketing" e gere um token com `ads_read`. Na Vercel, crie `META_ACCESS_TOKEN` e `META_AD_ACCOUNT_ID`. A ferramenta só lê dados; nunca altera campanhas.
+- **Vendas reais:** crie `WEBHOOK_TOKEN` na Vercel (uma senha longa). No gateway, cadastre o webhook `https://SEU-SITE.vercel.app/api/webhook/kiwify?token=SEU_TOKEN` (troque o nome do gateway). Nome, e-mail e CPF do comprador não são salvos.
+
 ### Primeiro acesso (login)
 
 O painel online pede login (Supabase Auth). Para criar sua conta sem depender de e-mail de confirmação:

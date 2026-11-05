@@ -166,4 +166,13 @@ export const MIGRACOES = [
       await rls(ctx, ['projetos']);
     },
   },
+  {
+    versao: 9,
+    nome: 'fase 8: vendas reais dos gateways (webhook, sem dados pessoais)',
+    up: async (ctx) => {
+      await ctx.ddl(`CREATE TABLE IF NOT EXISTS vendas (id ${id(ctx.pg)}, gateway TEXT, pedido TEXT, produto TEXT, valor REAL, tipo TEXT, status TEXT, quando BIGINT, UNIQUE (gateway, pedido, tipo));
+        CREATE INDEX IF NOT EXISTS ix_vendas_quando ON vendas(quando);`);
+      await rls(ctx, ['vendas']);
+    },
+  },
 ];

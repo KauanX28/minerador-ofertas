@@ -131,7 +131,7 @@ async function migrarLegado(usuario) {
 }
 
 export async function handler(req, res) {
-  const rotaPublica = /^\/api\/(publico|midia)\//.test(new URL(req.url, 'http://x').pathname);
+  const rotaPublica = /^\/api\/(publico|midia|webhook)\//.test(new URL(req.url, 'http://x').pathname);
   if (!authAtiva() || rotaPublica || !req.url.startsWith('/api/')) return comUsuario(null, () => atender(req, res));
   const v = await verificar(req).catch((e) => ({ erro: 'falha ao validar login: ' + e.message, status: 401 }));
   if (v.erro) return json(res, { erro: v.erro, precisaLogin: true }, v.status);
@@ -149,6 +149,13 @@ async function atender(req, res) {
     }
     if (rota === '/api/publico/config') return json(res, configPublica());
     if (rota.startsWith('/api/midia/')) return servirMiniatura(res, decodeURIComponent(rota.split('/').pop()));
+    if (rota.startsWith('/api/webhook/') && req.method === 'POST') {
+      // Webhook do gateway: protegido pelo token secreto na URL (WEBHOOK_TOKEN). Não guarda nome, e-mail nem CPF do comprador.
+      if (!process.env.WEBHOOK_TOKEN || q.token !== process.env.WEBHOOK_TOKEN) return json(res, { erro: 'token inválido' }, 403);
+      await iniciar();
+      const { registrarVenda } = await import('./vendas.js');
+      return json(res, await registrarVenda(rota.split('/')[3].toLowerCase().slice(0, 20), await corpo(req)));
+    }
     await iniciar();
 
     const pais = String(q.pais || 'BR').toUpperCase();
@@ -292,6 +299,14 @@ Dados: ${JSON.stringify(dados).slice(0, 6000)}`;
       if (req.method === 'DELETE') { await pj.apagarProjeto(idP); return json(res, { ok: true }); }
       if (req.method === 'POST') { const b = await corpo(req); return json(res, await pj.salvarProjeto({ ...b, id: idP })); }
       return json(res, (await pj.lerProjeto(idP)) || { erro: 'não encontrado' }, 200);
+    }
+    if (rota === '/api/vendas/resumo') { const { resumoVendas } = await import('./vendas.js'); return json(res, { ...(await resumoVendas(Number(q.dias || 30))), webhook: !!process.env.WEBHOOK_TOKEN }); }
+    if (rota.startsWith('/api/meta/')) {
+      const meta = await import('./meta.js');
+      if (!meta.metaConfigurada()) return json(res, { semConfig: true });
+      if (rota === '/api/meta/conta') return json(res, await meta.checkupConta());
+      if (rota === '/api/meta/desempenho') return json(res, await meta.desempenho({ dias: Number(q.dias || 7), ticket: Number(q.ticket || 0), cpaAlvo: Number(q.cpaAlvo || 0), cpaMax: Number(q.cpaMax || 0) }));
+      return json(res, { erro: 'rota não encontrada' }, 404);
     }
     if (rota === '/api/prefs' && req.method === 'GET') {
       const r = await get("SELECT valor FROM prefs WHERE user_id = ? AND chave = 'perfil'", [uid()]);
