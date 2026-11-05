@@ -2,6 +2,8 @@
 import { useState } from 'preact/hooks';
 import { html, useDados, useParams, useLoja, nomePais, fmt, rodarTarefa, exportarCSV, exportarXLSX, diasDesde, bib, post, loja } from '../base.mjs';
 import { Abas } from '../ui.mjs';
+import { ModalIA } from './iamodal.mjs';
+import { PadroesVencedores } from './referencias.mjs';
 
 // Busca por significado: a frase vira vetor no próprio navegador (mesmo modelo do robô) e o banco devolve os anúncios mais parecidos.
 let extrator = null;
@@ -49,8 +51,8 @@ export function TelaCriativos() {
   return html`
     <div class="cab"><div><h1>Criativos</h1><p>${nomePais(l.pais)} · anúncios ativos coletados. Quanto mais variações, mais o anunciante confia no criativo.</p></div>
       <div class="linha"><button onClick=${() => exportarCSV('criativos', lista, COLS)}>CSV</button><button onClick=${() => exportarXLSX('criativos', lista, COLS)}><${Ic} n="baixar" /> Excel</button></div></div>
-    <${Abas} abas=${[['palavra', 'Por palavra e filtros'], ['significado', 'Por significado']]} ativa=${modo} onTroca=${setModo} />
-    ${modo === 'significado' ? html`<${BuscaSignificado} onModelar=${setModelar} />` : html`
+    <${Abas} abas=${[['palavra', 'Por palavra e filtros'], ['significado', 'Por significado'], ['padroes', 'Padrões vencedores']]} ativa=${modo} onTroca=${setModo} />
+    ${modo === 'padroes' ? html`<${PadroesVencedores} />` : modo === 'significado' ? html`<${BuscaSignificado} onModelar=${setModelar} />` : html`
     <div class="barra-filtros">
       <label class="campo-inline"><${Ic} n="busca" /><input placeholder="Palavra no texto, título ou página" value=${f.texto} onChange=${(e) => mudar({ texto: e.target.value })} /></label>
       <select value=${f.ordem} onChange=${(e) => mudar({ ordem: e.target.value })} aria-label="Ordenar"><option value="dup">Mais variações</option><option value="antigos">Rodando há mais tempo</option><option value="novos">Mais recentes</option></select>
@@ -65,5 +67,5 @@ export function TelaCriativos() {
         ${f.texto ? html`<button onClick=${() => rodarTarefa({ tipo: 'minerar', palavras: f.texto, nicho: 'Avulso', pais: l.pais })}><${Ic} n="minerar" /> Buscar "${f.texto}" na Biblioteca agora</button>` : null}</div>
       ${lista.length ? html`<div class="ads">${lista.map((a) => html`<${CartaoAnuncio} a=${a} onModelar=${setModelar} />`)}</div>`
         : html`<${Vazio} titulo="Nenhum criativo com esses filtros" texto=${f.texto ? 'Peça ao robô para buscar esse termo na Biblioteca.' : 'Mude os filtros.'} />`}`}`}
-    ${modelar ? html`<${ModalModelar} ad=${modelar} onFechar=${() => setModelar(null)} />` : null}`;
+    ${modelar ? html`<${ModalIA} ad=${modelar} onFechar=${() => setModelar(null)} />` : null}`;
 }

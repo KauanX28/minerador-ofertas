@@ -361,5 +361,10 @@ export async function painelGeral(pais = 'BR') {
 export async function listaFavoritos(pais = 'BR') {
   const [favs, pags] = await Promise.all([all('SELECT * FROM favoritos WHERE user_id = ? ORDER BY criado DESC', [uid()]), rankingPaginas({ pais })]);
   const m = new Map(pags.map((p) => [p.page_id, p]));
-  return favs.map((f) => ({ ...f, pagina: f.tipo === 'pagina' ? m.get(f.chave) || null : null }));
+  // Criativos salvos (biblioteca de referências) vêm com os dados do anúncio.
+  const ids = favs.filter((f) => f.tipo === 'criativo').map((f) => f.chave);
+  const ads = ids.length ? await all(`SELECT ad_id, page_id, page_name, ativo, inicio, dup, formato, SUBSTR(texto, 1, 600) texto, titulo, link, cta, gateway, video,
+    CASE WHEN thumb_arquivo IS NOT NULL THEN '/api/midia/' || ad_id ELSE thumb END AS thumb FROM anuncios WHERE ad_id IN (${ids.map(() => '?').join(', ')})`, ids) : [];
+  const porAd = new Map(ads.map((a) => [a.ad_id, a]));
+  return favs.map((f) => ({ ...f, pagina: f.tipo === 'pagina' ? m.get(f.chave) || null : null, anuncio: f.tipo === 'criativo' ? porAd.get(f.chave) || null : null }));
 }

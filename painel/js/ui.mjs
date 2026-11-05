@@ -153,6 +153,7 @@ export function CartaoAnuncio({ a, onModelar }) {
       ${onModelar ? html`<button class="bt-p" onClick=${() => onModelar(a)}>Modelar</button>` : null}
       ${a.video ? html`<a class="bt-p" href=${a.video} target="_blank" rel="noopener" download title="Baixar vídeo"><${Ic} n="baixar" /></a>` : null}
       <a class="bt-p" href=${bib.anuncio(a.ad_id)} target="_blank" rel="noopener" title="Ver na Biblioteca"><${Ic} n="externo" /></a>
+      <${Estrela} tipo="criativo" chave=${a.ad_id} nome=${(a.page_name || '') + ': ' + (a.titulo || a.texto || '').slice(0, 60)} />
       ${a.link ? html`<a class="bt-p" href=${a.link} target="_blank" rel="noopener">Destino</a>` : null}
     </div></div>`;
 }

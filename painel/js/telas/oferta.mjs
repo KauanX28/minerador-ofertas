@@ -3,6 +3,7 @@ import { useState } from 'preact/hooks';
 import { html, useDados, navegar, nomePais, loja, fmt, relativo, bib, copiar, rodarTarefa, TIPOS_OFERTA, diasDesde, dataCurta } from '../base.mjs';
 import { Ic, Status, Gws, Preco, Score, Grafico, Ent, Estrela, Kpi, Esqueleto, Erro, Vazio, Abas, CartaoAnuncio, ModalModelar, Tabela, TipoTag } from '../ui.mjs';
 import { Validacao } from './validacao.mjs';
+import { ModalIA } from './iamodal.mjs';
 
 const ABAS = [['geral', 'Visão geral'], ['criativos', 'Criativos'], ['funil', 'Funil'], ['pagina', 'Página e validação'], ['checkout', 'Checkout'], ['historico', 'Histórico'], ['modelar', 'Modelar']];
 
@@ -41,7 +42,7 @@ export function TelaOferta({ id, aba }) {
       ${aba === 'historico' ? html`<${Historico} historico=${historico} anuncios=${anuncios} />` : null}
       ${aba === 'modelar' ? html`<${Modelar} p=${p} anuncios=${anuncios} analise=${analise} onModelar=${setModelar} />` : null}
     </div>
-    ${modelar ? html`<${ModalModelar} ad=${modelar} onFechar=${() => setModelar(null)} />` : null}`;
+    ${modelar ? html`<${ModalIA} ad=${{ ...modelar, page_name: modelar.page_name || p.nome }} onFechar=${() => setModelar(null)} />` : null}`;
 }
 
 function Geral({ p, grupo, historico, anuncios }) {
@@ -147,7 +148,7 @@ function Modelar({ p, anuncios, analise, onModelar }) {
     ['Entregável e order bumps', `Sugira o entregável (formato, módulos, bônus) de um produto low ticket para concorrer com a oferta abaixo, mais 4 a 6 order bumps coerentes e um upsell.\n\n${ref}`],
   ];
   return html`<div class="dica">Modelar é criar a sua versão a partir do que funciona: mesma lógica, outra promessa, outro texto, outro criativo. Copie um prompt e cole no ChatGPT, Claude ou Gemini.</div>
-    ${campeao ? html`<div class="linha" style="margin-bottom:12px"><button onClick=${() => onModelar(campeao)}>Prompts só do criativo campeão</button></div>` : null}
+    ${campeao ? html`<div class="linha" style="margin-bottom:12px"><button class="pri" onClick=${() => onModelar(campeao)}>Analisar o criativo campeão com IA e criar hooks, roteiros e copies</button></div>` : null}
     <div class="grade-2">${prompts.map(([t, txt]) => html`<div class="painel-box"><div class="pb-cab"><b>${t}</b><button class="bt-p" onClick=${() => copiar(txt)}><${Ic} n="copiar" /> Copiar</button></div>
       <div class="pb-corpo"><pre class="prompt">${txt}</pre></div></div>`)}</div>`;
 }

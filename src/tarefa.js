@@ -20,6 +20,8 @@ import { processarMiniaturas, limparMiniaturas } from './midia.js';
 import { usoELimites } from './uso.js';
 import { enriquecerTudo } from './enriquecer.js';
 import { validarDominio } from './validacao.js';
+import { gerar, provedores, promptAnaliseCriativo, validarAnalise } from './ia.js';
+import { transcreverAnuncio, lerTranscricao } from './transcricao.js';
 import { idiomaDoPais } from './classificador.js';
 
 // Palavras do nicho no idioma do país (config antiga com lista simples = português).
@@ -34,7 +36,6 @@ function palavrasDoNicho(config, nicho, pais) {
 // Orçamento de tempo da rodada (minutos do GitHub Actions): cada etapa confere antes de começar.
 let PRAZO = Infinity;
 const temTempo = (minutos = 2) => Date.now() + minutos * 60000 < PRAZO;
-import { rankingPaginas } from './score.js';
 import { analisarPagina, lerCheckout } from './analisador.js';
 import { gatewayPorTexto, hostDe, detectarGateway, raizDominio, GATEWAYS } from './util.js';
 
@@ -351,6 +352,7 @@ async function rotina(ctx, o) {
   }
   await salvarIdx();
   await processarFila(ctx, o);
+  if (temTempo(4)) await loteIA(ctx, { ...o, pais }).catch((e) => log(`  IA: ${e.message}`));
 }
 
 // Retenção para caber nos 500 MB: texto completo só de anúncio ativo ou salvo; inativo há 60+ dias fora das listas é apagado.
@@ -380,10 +382,35 @@ async function vetores(_, o = {}) {
 }
 async function sites(ctx, o) { await enriquecerDominios(ctx, o, { limite: Number(o.limite || 10), minAnuncios: Number(o.min || 8) }); }
 
+// Lote diário de IA: o criativo campeão das melhores ofertas low ticket do país é transcrito e analisado uma vez por dia.
+async function loteIA(_, o = {}) {
+  const p = provedores();
+  if (!p.gemini && !p.groq) { log('  IA: sem chave (GEMINI_API_KEY ou GROQ_API_KEY); a interface mostra os prompts para copiar'); return; }
+  const pais = o.pais || 'BR';
+  const chaveDia = 'ia_lote_' + pais;
+  const hojeStr = new Date().toISOString().slice(0, 10);
+  if (!o.forcar && (await get('SELECT valor FROM ajustes WHERE chave = ?', [chaveDia]))?.valor === hojeStr) return;
+  const top = (await rankingPaginas({ pais, tipo: 'low' })).filter((x) => x.status !== 'Teste').slice(0, Number(o.limite || 20));
+  log(`> IA: analisando o criativo campeão de ${top.length} ofertas (${pais})`);
+  let n = 0;
+  for (const pg of top) {
+    if (!temTempo(2)) break;
+    const ad = await get('SELECT ad_id, titulo, texto, dup, inicio, video FROM anuncios WHERE page_id = ? AND pais = ? AND ativo = 1 ORDER BY dup DESC, inicio ASC LIMIT 1', [pg.page_id, pais]);
+    if (!ad) continue;
+    ad.dias = ad.inicio ? Math.floor((Date.now() / 1000 - ad.inicio) / 86400) : null;
+    const tr = (await transcreverAnuncio(ad, { log }).catch((e) => { log(`  transcrição: ${e.message}`); return null; })) || (await lerTranscricao(ad.ad_id));
+    const r = await gerar({ tarefa: 'criativo', entrada: { ad_id: ad.ad_id, tr: !!tr }, prompt: promptAnaliseCriativo(ad, tr?.texto), validar: validarAnalise });
+    if (r.semIA) { log(`  IA indisponível agora: ${r.erros.join(' | ')}`); break; }
+    if (!r.doCache) n++;
+  }
+  await run("INSERT INTO ajustes (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor", [chaveDia, hojeStr]);
+  log(`  IA: ${n} criativos analisados agora (os demais já estavam no cache)`);
+}
+
 async function validar(_, o) { const d = o.url || o._[1]; if (!d) throw new Error('Informe --url'); const v = await validarDominio(d); log(JSON.stringify(v, null, 1).slice(0, 3000)); }
 
-const TAREFAS = { minerar, gateway, analisar, atualizar, rotina, manutencao, enriquecer, sites, vetores, validar, fila: processarFila };
-const SEM_NAVEGADOR = new Set(['manutencao', 'enriquecer', 'vetores', 'validar']);
+const TAREFAS = { minerar, gateway, analisar, atualizar, rotina, manutencao, enriquecer, sites, vetores, validar, ia: loteIA, fila: processarFila };
+const SEM_NAVEGADOR = new Set(['manutencao', 'enriquecer', 'vetores', 'validar', 'ia']);
 const ORIGEM = process.env.GITHUB_ACTIONS ? 'actions' : 'local';
 
 const o = lerArgs(process.argv.slice(2));

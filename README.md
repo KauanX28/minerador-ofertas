@@ -91,6 +91,20 @@ A validação de sites usa o Chrome UX Report e o PageSpeed Insights, que pedem 
 
 Sem a chave, o resto da validação funciona normalmente: Wayback Machine, idade do domínio (RDAP), subdomínios (Cert Spotter / crt.sh) e ranking Tranco.
 
+### IA grátis (opcional): análise de criativos, hooks, roteiros e copies
+
+Sem nenhuma chave, tudo funciona: cada função de IA mostra o prompt pronto para copiar. Com chave, a ferramenta gera sozinha e guarda o resultado no banco (cache: nada é gerado duas vezes). Ordem usada: Gemini → Groq → modelo no navegador (WebGPU) → prompt.
+
+| Onde | Variável | Para quê | Como conseguir (grátis, sem cartão) |
+|---|---|---|---|
+| GitHub Secrets e Vercel | `GEMINI_API_KEY` | análise e geração | https://aistudio.google.com/apikey |
+| GitHub Secrets e Vercel | `GROQ_API_KEY` | reserva da IA e transcrição dos vídeos (Whisper) | https://console.groq.com/keys |
+| Vercel | `PEXELS_API_KEY` ou `UNSPLASH_ACCESS_KEY` | busca de fotos no editor de criativo | https://www.pexels.com/api/ ou https://unsplash.com/developers |
+
+- No nível grátis do Gemini o Google pode usar os textos enviados para melhorar os modelos. Não envie dados pessoais.
+- Também dá para salvar uma chave só no navegador, em Configurações → IA. Ela não vai para o servidor.
+- Uma vez por dia, o robô transcreve e analisa o criativo campeão das 20 melhores ofertas, dentro da cota grátis.
+
 ### Primeiro acesso (login)
 
 O painel online pede login (Supabase Auth). Para criar sua conta sem depender de e-mail de confirmação:

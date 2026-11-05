@@ -186,6 +186,95 @@ async function atender(req, res) {
       if (req.method === 'POST') { const b = await corpo(req); if (!b.dominio) return json(res, { erro: 'informe o domínio' }, 400); return json(res, await validarDominio(b.dominio)); }
       return json(res, (q.dominio && (await lerValidacao(q.dominio))) || null);
     }
+    if (rota.startsWith('/api/ia/')) {
+      const ia = await import('./ia.js');
+      const { lerTranscricao, salvarTranscricao } = await import('./transcricao.js');
+      const anuncio = async (adId) => {
+        const a = await get('SELECT ad_id, titulo, texto, dup, inicio, video, page_name FROM anuncios WHERE ad_id = ?', [String(adId)]);
+        if (a) a.dias = a.inicio ? Math.floor((Date.now() / 1000 - a.inicio) / 86400) : null;
+        return a;
+      };
+      if (rota === '/api/ia/estado') return json(res, { provedores: ia.provedores(), aviso: ia.AVISO_GEMINI, tipos: ia.TIPOS_GERACAO });
+      if (rota === '/api/ia/criativo') {
+        const b = req.method === 'POST' ? await corpo(req) : q;
+        const a = await anuncio(b.ad_id);
+        if (!a) return json(res, { erro: 'anúncio não encontrado' }, 404);
+        const tr = await lerTranscricao(a.ad_id);
+        const entrada = { ad_id: a.ad_id, tr: !!tr };
+        if (req.method !== 'POST') return json(res, { ...((await ia.lerCache(ia.chaveCache('criativo', entrada))) || {}), transcricao: tr });
+        return json(res, { ...(await ia.gerar({ tarefa: 'criativo', entrada, prompt: ia.promptAnaliseCriativo(a, tr?.texto), validar: ia.validarAnalise })), transcricao: tr });
+      }
+      if (rota === '/api/ia/gerar' && req.method === 'POST') {
+        const b = await corpo(req);
+        if (!ia.TIPOS_GERACAO[b.tipo]) return json(res, { erro: 'tipo inválido' }, 400);
+        const entrada = { tipo: b.tipo, ad_id: b.ad_id || null, produto: String(b.produto || '').slice(0, 300), base: b.ad_id ? null : b.analise };
+        let analise = b.analise;
+        if (b.ad_id && !analise) { const tr = await lerTranscricao(b.ad_id); analise = (await ia.lerCache(ia.chaveCache('criativo', { ad_id: String(b.ad_id), tr: !!tr })))?.resultado; }
+        if (!analise) return json(res, { erro: 'analise o criativo primeiro' }, 400);
+        return json(res, await ia.gerar({ tarefa: 'gerar_' + b.tipo, entrada, prompt: ia.promptGeracao(b.tipo, analise, entrada.produto) }));
+      }
+      if (rota === '/api/ia/salvar' && req.method === 'POST') {
+        // Resultado gerado no navegador (chave do próprio usuário ou modelo local) também vai para o cache.
+        const b = await corpo(req);
+        if (!/^[a-z_]+:[0-9a-f]{24}$/.test(String(b.chave || '')) || !b.resultado) return json(res, { erro: 'dados inválidos' }, 400);
+        await ia.salvarCache(b.chave, String(b.chave).split(':')[0], b.resultado, String(b.provedor || 'navegador').slice(0, 20));
+        return json(res, { ok: true });
+      }
+      if (rota === '/api/ia/transcricao' && req.method === 'POST') {
+        const b = await corpo(req);
+        if (!b.ad_id || !b.texto) return json(res, { erro: 'dados inválidos' }, 400);
+        await salvarTranscricao(String(b.ad_id), String(b.texto), b.idioma, String(b.fonte || 'navegador').slice(0, 20));
+        return json(res, { ok: true });
+      }
+      return json(res, { erro: 'rota de IA não encontrada' }, 404);
+    }
+    if (rota === '/api/imagens') {
+      // Fotos grátis para o editor (Pexels ou Unsplash, com a chave grátis do dono). Sem chave: lista vazia + aviso.
+      const termo = String(q.q || '').trim().slice(0, 80);
+      if (!termo) return json(res, []);
+      if (process.env.PEXELS_API_KEY) {
+        const r = await fetch(`https://api.pexels.com/v1/search?per_page=24&locale=pt-BR&query=${encodeURIComponent(termo)}`, { headers: { Authorization: process.env.PEXELS_API_KEY } });
+        const d = await r.json();
+        return json(res, (d.photos || []).map((p) => ({ mini: p.src.tiny, grande: p.src.large2x, autor: p.photographer + ' (Pexels)' })));
+      }
+      if (process.env.UNSPLASH_ACCESS_KEY) {
+        const r = await fetch(`https://api.unsplash.com/search/photos?per_page=24&query=${encodeURIComponent(termo)}`, { headers: { Authorization: 'Client-ID ' + process.env.UNSPLASH_ACCESS_KEY } });
+        const d = await r.json();
+        return json(res, (d.results || []).map((p) => ({ mini: p.urls.thumb, grande: p.urls.regular, autor: p.user?.name + ' (Unsplash)' })));
+      }
+      return json(res, { erro: 'Busca de fotos sem chave: configure PEXELS_API_KEY ou UNSPLASH_ACCESS_KEY (grátis). Enquanto isso, envie uma imagem sua.' }, 400);
+    }
+    if (rota === '/api/padroes' || rota === '/api/padroes/resumo') {
+      // Padrões vencedores do nicho: hooks, formatos e CTAs mais duplicados (SQL) + resumo semanal por IA (cache).
+      const b = req.method === 'POST' ? await corpo(req) : q;
+      const nicho = String(b.nicho || '');
+      const ads = await all(`SELECT a.texto, a.titulo, a.dup, a.formato, a.cta, a.inicio, a.texto_hash FROM anuncios a JOIN paginas p ON p.page_id = a.page_id
+        WHERE a.ativo = 1 AND a.pais = ? AND COALESCE(p.tipo, 'indefinido') IN ('low', 'info_alto', 'indefinido') ${nicho ? 'AND p.nichos LIKE ?' : ''}
+        ORDER BY a.dup DESC LIMIT 500`, nicho ? [pais, `%"${nicho}"%`] : [pais]);
+      const vistos = new Set(), hooks = [], formatos = {}, ctas = {}, palavras = {};
+      const PARADA = new Set('a o e de da do das dos que para com em um uma no na os as por se seu sua você mais não é ao à como já ou'.split(' '));
+      for (const a of ads) {
+        formatos[a.formato || '?'] = (formatos[a.formato || '?'] || 0) + (a.dup || 1);
+        if (a.cta) ctas[a.cta] = (ctas[a.cta] || 0) + (a.dup || 1);
+        if (!a.texto || vistos.has(a.texto_hash)) continue;
+        vistos.add(a.texto_hash);
+        const h = String(a.texto).split(/(?<=[.!?])\s|\n/)[0].trim().slice(0, 160);
+        if (h.length > 12 && hooks.length < 15) hooks.push({ hook: h, dup: a.dup || 1, dias: a.inicio ? Math.floor((Date.now() / 1000 - a.inicio) / 86400) : null });
+        for (const w of h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').match(/[a-z0-9]{4,}/g) || []) if (!PARADA.has(w)) palavras[w] = (palavras[w] || 0) + 1;
+      }
+      const ordem = (o, n) => Object.entries(o).sort((x, y) => y[1] - x[1]).slice(0, n);
+      const top20 = ads.slice(0, 20).filter((a) => a.inicio);
+      const dados = { nicho, total: ads.length, hooks, formatos: ordem(formatos, 6), ctas: ordem(ctas, 8), palavras: ordem(palavras, 20),
+        idadeMediaTop: top20.length ? Math.round(top20.reduce((s, a) => s + (Date.now() / 1000 - a.inicio) / 86400, 0) / top20.length) : null };
+      const ia = await import('./ia.js');
+      const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay());
+      const entrada = { nicho, pais, semana: semana.toISOString().slice(0, 10) };
+      if (rota === '/api/padroes') return json(res, { ...dados, resumo: (await ia.lerCache(ia.chaveCache('padroes', entrada)))?.resultado || null });
+      const prompt = `Você analisa anúncios de infoprodutos low ticket. Com estes dados dos criativos mais duplicados do nicho "${nicho || 'todos'}" (${pais}), resuma os padrões vencedores.
+Responda APENAS JSON em português: {"resumo": "3 frases", "estruturas_de_hook": ["5 fórmulas de hook com lacunas, ex.: 'Como [resultado] sem [sacrifício]'"], "formatos": "o que mais funciona", "ctas": "o que mais funciona", "o_que_testar": ["3 testes"]}
+Dados: ${JSON.stringify(dados).slice(0, 6000)}`;
+      return json(res, await ia.gerar({ tarefa: 'padroes', entrada, prompt }));
+    }
     if (rota === '/api/prefs' && req.method === 'GET') {
       const r = await get("SELECT valor FROM prefs WHERE user_id = ? AND chave = 'perfil'", [uid()]);
       return json(res, r ? JSON.parse(r.valor) : {});

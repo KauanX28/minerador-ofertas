@@ -9,7 +9,8 @@ const linkDe = (f) => (f.tipo === 'pagina' ? '/oferta/' + encodeURIComponent(f.c
 export function TelaListas() {
   const [favs, setFavs] = useState(null), [erro, setErro] = useState(null);
   const [pasta, setPasta] = useState(''), [tag, setTag] = useState(''), [editar, setEditar] = useState(null), [arrastando, setArr] = useState(null);
-  const carregar = () => api('/api/favoritos').then(setFavs).catch((e) => setErro(e.message));
+  // Criativos salvos ficam em Referências; aqui só ofertas, sites e checkouts.
+  const carregar = () => api('/api/favoritos').then((l) => setFavs(l.filter((f) => f.tipo !== 'criativo'))).catch((e) => setErro(e.message));
   useEffect(() => { carregar(); }, []);
   if (erro) return html`<${Erro} msg=${erro} />`;
   if (!favs) return html`<${Esqueleto} linhas=${8} />`;

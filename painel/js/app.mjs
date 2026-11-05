@@ -16,13 +16,16 @@ import { TelaMinerar } from './telas/minerar.mjs';
 import { TelaConfig } from './telas/config.mjs';
 import { TelaUso } from './telas/uso.mjs';
 import { BoasVindas } from './telas/boasvindas.mjs';
+import { TelaEditor } from './telas/editor.mjs';
+import { TelaVideo } from './telas/video.mjs';
+import { TelaReferencias } from './telas/referencias.mjs';
 
 // O menu segue o caminho de trabalho: encontrar → validar → modelar → escalar.
 const MENU = [
   [null, [['/', 'Início', 'inicio']]],
   ['1 · Encontrar', [['/ofertas', 'Ofertas escaladas', 'ofertas'], ['/criativos', 'Criativos', 'anuncios'], ['/gateways', 'Gateways', 'gateways']]],
   ['2 · Validar', [['/sites', 'Análise de site', 'dominio']]],
-  ['3 · Modelar', [['/prompts', 'Prompts de modelagem', 'prompts']]],
+  ['3 · Modelar', [['/prompts', 'Prompts de modelagem', 'prompts'], ['/editor', 'Editor de criativo', 'anuncios'], ['/video', 'Vídeo simples', 'raio'], ['/referencias', 'Referências salvas', 'estrela']]],
   ['4 · Escalar', [['/calculadoras', 'Calculadoras e plano', 'calc']]],
   ['Trabalho', [['/listas', 'Minhas listas', 'listas']]],
 ];
@@ -46,6 +49,9 @@ const ROTAS = [
   [/^\/config$/, () => html`<${TelaConfig} />`],
   [/^\/uso$/, () => html`<${TelaUso} />`],
   [/^\/boas-vindas$/, () => html`<${BoasVindas} />`],
+  [/^\/editor$/, () => html`<${TelaEditor} />`],
+  [/^\/video$/, () => html`<${TelaVideo} />`],
+  [/^\/referencias$/, () => html`<${TelaReferencias} />`],
 ];
 
 function Menu({ caminho, aberto, onFechar }) {

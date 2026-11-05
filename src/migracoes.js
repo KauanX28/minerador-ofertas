@@ -148,4 +148,13 @@ export const MIGRACOES = [
       await rls(ctx, ['validacoes']);
     },
   },
+  {
+    versao: 7,
+    nome: 'fase 5: cache de IA e transcrições de vídeo',
+    up: async (ctx) => {
+      await ctx.ddl(`CREATE TABLE IF NOT EXISTS ia_cache (chave TEXT PRIMARY KEY, tarefa TEXT, saida TEXT, provedor TEXT, quando BIGINT);
+        CREATE TABLE IF NOT EXISTS transcricoes (ad_id TEXT PRIMARY KEY, texto TEXT, idioma TEXT, fonte TEXT, quando BIGINT);`);
+      await rls(ctx, ['ia_cache', 'transcricoes']);
+    },
+  },
 ];

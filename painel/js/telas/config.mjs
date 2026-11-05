@@ -2,6 +2,8 @@
 import { useState } from 'preact/hooks';
 import { html, loja, definir, post, aviso, PAISES } from '../base.mjs';
 import { Ic, Chips } from '../ui.mjs';
+import { chaves, temWebGPU } from '../ia.mjs';
+import { useDados } from '../base.mjs';
 
 const IDIOMAS = [['pt', 'Português'], ['es', 'Espanhol'], ['en', 'Inglês']];
 const normalizar = (v) => (Array.isArray(v) ? { pt: v } : { ...v });
@@ -11,6 +13,22 @@ function ListaPalavras({ palavras, onTroca, placeholder }) {
   const add = () => { const ps = nova.split(',').map((s) => s.trim()).filter((s) => s && !palavras.includes(s)); if (ps.length) onTroca([...palavras, ...ps]); setNova(''); };
   return html`<div class="chips editaveis">${palavras.map((p) => html`<span class="chip on">${p}<button type="button" aria-label=${'Remover ' + p} onClick=${() => onTroca(palavras.filter((x) => x !== p))}>×</button></span>`)}
     <input value=${nova} onInput=${(e) => setNova(e.target.value)} onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} onBlur=${add} placeholder=${placeholder || '+ palavra (Enter)'} /></div>`;
+}
+
+// IA grátis: o que o servidor tem e as chaves que ficam só neste navegador.
+function PainelIA() {
+  const est = useDados('/api/ia/estado');
+  const [g, setG] = useState(chaves.gemini), [q, setQ] = useState(chaves.groq);
+  const p = est.dados?.provedores || {};
+  return html`<div class="painel-box"><div class="pb-cab"><h2>IA (grátis)</h2></div><div class="pb-corpo col-gap">
+    <div class="peq">No servidor: Gemini ${p.gemini ? '✓' : '—'} · Groq ${p.groq ? '✓' : '—'} ${!p.gemini && !p.groq ? html`<span class="mut">(configure GEMINI_API_KEY ou GROQ_API_KEY; veja o README)</span>` : null}</div>
+    <p class="mut peq" style="margin:0">Ou salve sua própria chave grátis aqui. Ela fica só neste navegador e é usada quando o servidor não tem IA.
+      Pegue em <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> ou <a href="https://console.groq.com/keys" target="_blank" rel="noopener">Groq</a>, sem cartão.</p>
+    <div class="form-grade"><label class="campo">Chave do Gemini<input type="password" value=${g} onInput=${(e) => setG(e.target.value)} autocomplete="off" /></label>
+      <label class="campo">Chave do Groq<input type="password" value=${q} onInput=${(e) => setQ(e.target.value)} autocomplete="off" /></label></div>
+    <div class="linha"><button onClick=${() => { chaves.gemini = g.trim(); chaves.groq = q.trim(); aviso('Chaves salvas neste navegador'); }}>Salvar chaves no navegador</button>
+      <span class="mut peq">${temWebGPU() ? 'Seu navegador também roda um modelo local (WebGPU).' : ''}</span></div>
+    <p class="mut peq" style="margin:0">${est.dados?.aviso || ''}</p></div></div>`;
 }
 
 export function TelaConfig() {
@@ -48,6 +66,7 @@ export function TelaConfig() {
         <div class="painel-box"><div class="pb-cab"><h2>Low ticket</h2></div><div class="pb-corpo"><div class="form-grade">
           ${num('Preço máximo de low ticket (R$)', c.precoMaxLowTicket ?? 97, (v) => mudar({ precoMaxLowTicket: v }))}
           ${num('Filtro de preço padrão (R$)', c.precoMaxFiltro ?? 47, (v) => mudar({ precoMaxFiltro: v }))}</div></div></div>
+        <${PainelIA} />
         <div class="painel-box"><div class="pb-cab"><h2>Anunciantes ignorados</h2></div><div class="pb-corpo">
           <p class="mut peq" style="margin-top:0">Marcas e apps que aparecem em toda busca e não são ofertas para modelar. Vale nome ou site. Aplica na próxima rodada do robô.</p>
           <${ListaPalavras} palavras=${c.bloqueio || []} onTroca=${(b) => mudar({ bloqueio: b })} placeholder="+ marca ou site" /></div></div>

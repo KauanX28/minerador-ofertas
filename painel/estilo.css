@@ -179,8 +179,8 @@ pre.prompt { white-space: pre-wrap; background: var(--sup2); border: 1px solid v
 #app { display: contents; }
 html, body { height: auto; min-height: 100%; }
 [data-tema="escuro"] { color-scheme: dark; }
-a.botao { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid var(--borda2); border-radius: 6px; background: var(--sup); color: var(--txt); font-weight: 500; white-space: nowrap; }
-a.botao:hover { background: var(--sup2); text-decoration: none; }
+a.botao, label.botao { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid var(--borda2); border-radius: 6px; background: var(--sup); color: var(--txt); font-weight: 500; white-space: nowrap; }
+a.botao:hover, label.botao:hover { background: var(--sup2); text-decoration: none; }
 a.botao.pri { background: var(--pri); border-color: var(--pri); color: #fff; } a.botao.pri:hover { background: var(--pri-h); }
 button.on { border-color: var(--pri); color: var(--pri); background: var(--pri-s); }
 .sem-sub, .sem-sub:hover { text-decoration: none; color: inherit; }
@@ -395,3 +395,27 @@ select.grande { width: 100%; padding: 10px; font-size: 15px; }
 .check .sim { background: var(--ok-s); color: var(--ok); } .check .nao { background: var(--aviso-s); color: var(--aviso); }
 .check { display: flex; align-items: center; padding: 3px 0; font-size: 13px; }
 a.chip { color: var(--txt2); } a.chip:hover { text-decoration: none; border-color: var(--pri); }
+
+/* IA (fase 5) */
+.ia-ref { display: flex; flex-direction: column; gap: 2px; padding: 0 2px 6px; }
+.grade-ia { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px 18px; }
+.lista-ia { margin: 6px 0; padding-left: 20px; } .lista-ia li { padding: 4px 0; } .lista-ia li > span { margin-right: 6px; }
+.lista-ia li button { vertical-align: middle; }
+.story { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+
+/* editor de criativo */
+.editor { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; align-items: start; }
+.editor-palco { background: repeating-conic-gradient(var(--sup2) 0 25%, var(--sup) 0 50%) 0 0 / 20px 20px; border: 1px solid var(--borda); border-radius: var(--raio); min-height: 400px; display: flex; justify-content: center; padding: 10px; overflow: hidden; }
+.fotos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; max-height: 260px; overflow: auto; }
+.fotos button { padding: 0; border: 0; } .fotos img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; display: block; }
+@media (max-width: 980px) { .editor { grid-template-columns: 1fr; } }
+
+.video-tela { max-width: 100%; max-height: 620px; height: auto; width: auto; border-radius: 8px; }
+.cena { display: flex; flex-direction: column; gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--borda); }
+
+.ref { display: flex; flex-direction: column; gap: 6px; } .ref-rod { display: flex; flex-direction: column; gap: 4px; padding: 0 4px; }
+.barra-h { display: grid; grid-template-columns: 120px 1fr 50px; gap: 8px; align-items: center; font-size: 12.5px; padding: 3px 0; }
+.barra-h span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .barra-h i { height: 8px; background: var(--sup2); border-radius: 4px; overflow: hidden; display: block; }
+.barra-h i b { display: block; height: 100%; background: var(--pri); } .barra-h small { text-align: right; }
+textarea { font-family: var(--fonte); }
+label.botao { width: fit-content; font-size: 13px; }
