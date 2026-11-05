@@ -110,6 +110,23 @@ Sem nenhuma chave, tudo funciona: cada função de IA mostra o prompt pronto par
 - **Anúncios:** crie um app em https://developers.facebook.com/apps (tipo "Empresa", pode ficar em modo de desenvolvimento), adicione "API de Marketing" e gere um token com `ads_read`. Na Vercel, crie `META_ACCESS_TOKEN` e `META_AD_ACCOUNT_ID`. A ferramenta só lê dados; nunca altera campanhas.
 - **Vendas reais:** crie `WEBHOOK_TOKEN` na Vercel (uma senha longa). No gateway, cadastre o webhook `https://SEU-SITE.vercel.app/api/webhook/kiwify?token=SEU_TOKEN` (troque o nome do gateway). Nome, e-mail e CPF do comprador não são salvos.
 
+### Alertas, canal de ofertas e relatório (opcional)
+
+- **Telegram:** já configurado pelo `configurar-segredos.ps1`. Você recebe avisos quando um anunciante que acompanha sobe X%, lança criativos novos, quando aparece oferta nova forte, quando o robô quebra e quando o banco passa de 80%. Os limites ficam em Configurações → Alertas.
+- **Notificação no navegador (celular e computador):** em Configurações → Alertas, clique em "Ligar notificações". As chaves VAPID são geradas sozinhas.
+- **Canal grátis com as ofertas do dia:** crie um canal no Telegram, adicione o seu bot como administrador e salve o id do canal (ex.: `@meucanal`) no secret `TELEGRAM_CANAL_ID`. Para os links abrirem no painel, crie a variável `PAINEL_URL` (Settings → Variables) com o endereço da Vercel.
+- **E-mail (relatório semanal):** gere uma "senha de app" no Gmail e salve `SMTP_USER` (seu Gmail), `SMTP_PASS` (a senha de app) e, se quiser outro destino, `ALERTA_EMAIL` nos secrets do GitHub.
+- **Relatório da semana:** sai toda segunda-feira e também fica no menu Trabalho → Relatório da semana.
+
+### Extensão do Chrome (grátis)
+
+1. Baixe a pasta `extensao` deste repositório (botão "Code" → "Download ZIP" e extraia).
+2. Abra `chrome://extensions`, ative o "Modo do desenvolvedor" e clique em "Carregar sem compactação", escolhendo a pasta `extensao`.
+3. Clique no ícone da extensão e cole o endereço do painel e a sua chave (Configurações → Extensão do Chrome).
+4. Na Biblioteca de Anúncios, cada anunciante ganha um selo com os anúncios na tela, e o painel lateral tem "Salvar", "Abrir" e "Analisar site".
+
+Publicar na Chrome Web Store é opcional (cobra uma taxa única de desenvolvedor); o modo "carregar sem compactação" é grátis.
+
 ### Primeiro acesso (login)
 
 O painel online pede login (Supabase Auth). Para criar sua conta sem depender de e-mail de confirmação:

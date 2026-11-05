@@ -1,6 +1,11 @@
 // Service worker: guarda a casca do painel para abrir rápido e funcionar como app instalado.
 // Dados (/api) nunca vêm do cache: sempre frescos.
-const CACHE = 'minerador-v1';
+const CACHE = 'minerador-v2';
+self.addEventListener('push', (e) => {
+  let d = {}; try { d = e.data.json(); } catch { d = { titulo: 'Minerador', corpo: e.data?.text() || '' }; }
+  e.waitUntil(self.registration.showNotification(d.titulo || 'Minerador', { body: d.corpo || '', icon: '/icone-192.png', badge: '/icone-192.png', data: { url: d.url || '/' } }));
+});
+self.addEventListener('notificationclick', (e) => { e.notification.close(); e.waitUntil(clients.openWindow(e.notification.data?.url || '/')); });
 const CASCA = ['/', '/index.html', '/estilo.css', '/icone.svg', '/vendor/preact.mjs', '/vendor/hooks.mjs', '/vendor/htm.mjs'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CASCA)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });

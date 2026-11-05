@@ -124,9 +124,12 @@ function Checkouts({ checkouts, p }) {
 
 // Linha do tempo dos criativos: quando cada um entrou e quando saiu.
 function Historico({ historico, anuncios }) {
+  const [periodo, setPeriodo] = useState(30);
+  const corte = new Date(Date.now() - periodo * 864e5).toISOString().slice(0, 10);
+  const serie = historico.filter((h) => h.data >= corte).map((h) => [h.data, h.ativos]);
   const lista = [...anuncios].filter((a) => a.inicio).sort((a, b) => a.inicio - b.inicio).slice(-40);
   const ini = Math.min(...lista.map((a) => a.inicio)), fim = Date.now() / 1000, span = Math.max(fim - ini, 86400);
-  return html`<div class="painel-box"><div class="pb-cab"><h2>Anúncios ativos por dia</h2></div><div class="pb-corpo"><${Grafico} serie=${historico.map((h) => [h.data, h.ativos])} h=${180} /></div></div>
+  return html`<div class="painel-box"><div class="pb-cab"><h2>Anúncios ativos por dia</h2><div class="seg">${[7, 14, 30, 90].map((n) => html`<button class=${periodo === n ? 'ativo' : ''} onClick=${() => setPeriodo(n)}>${n} dias</button>`)}</div></div><div class="pb-corpo"><${Grafico} serie=${serie} h=${180} /></div></div>
     <div class="painel-box secao"><div class="pb-cab"><h2>Linha do tempo dos criativos</h2><span class="mut peq">barra = período no ar · cinza = já saiu</span></div><div class="pb-corpo">
       ${lista.length ? lista.map((a) => { const sai = a.ativo ? fim : (a.inativo_desde || a.visto_ultimo || fim);
         return html`<div class="tl-linha"><span class="tl-rot" title=${a.texto || ''}>${(a.titulo || a.texto || a.ad_id).slice(0, 40)}</span>

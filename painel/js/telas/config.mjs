@@ -3,6 +3,7 @@ import { useState } from 'preact/hooks';
 import { html, loja, definir, post, aviso, PAISES } from '../base.mjs';
 import { Ic, Chips } from '../ui.mjs';
 import { chaves, temWebGPU } from '../ia.mjs';
+import { PainelAlertas, PainelExtensao } from './alertas.mjs';
 import { useDados } from '../base.mjs';
 
 const IDIOMAS = [['pt', 'Português'], ['es', 'Espanhol'], ['en', 'Inglês']];
@@ -66,7 +67,9 @@ export function TelaConfig() {
         <div class="painel-box"><div class="pb-cab"><h2>Low ticket</h2></div><div class="pb-corpo"><div class="form-grade">
           ${num('Preço máximo de low ticket (R$)', c.precoMaxLowTicket ?? 97, (v) => mudar({ precoMaxLowTicket: v }))}
           ${num('Filtro de preço padrão (R$)', c.precoMaxFiltro ?? 47, (v) => mudar({ precoMaxFiltro: v }))}</div></div></div>
+        <${PainelAlertas} config=${c} mudar=${mudar} />
         <${PainelIA} />
+        <${PainelExtensao} />
         <div class="painel-box"><div class="pb-cab"><h2>Anunciantes ignorados</h2></div><div class="pb-corpo">
           <p class="mut peq" style="margin-top:0">Marcas e apps que aparecem em toda busca e não são ofertas para modelar. Vale nome ou site. Aplica na próxima rodada do robô.</p>
           <${ListaPalavras} palavras=${c.bloqueio || []} onTroca=${(b) => mudar({ bloqueio: b })} placeholder="+ marca ou site" /></div></div>

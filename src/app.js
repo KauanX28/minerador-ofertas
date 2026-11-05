@@ -131,7 +131,7 @@ async function migrarLegado(usuario) {
 }
 
 export async function handler(req, res) {
-  const rotaPublica = /^\/api\/(publico|midia|webhook)\//.test(new URL(req.url, 'http://x').pathname);
+  const rotaPublica = /^\/api\/(publico|midia|webhook|extensao)\//.test(new URL(req.url, 'http://x').pathname);
   if (!authAtiva() || rotaPublica || !req.url.startsWith('/api/')) return comUsuario(null, () => atender(req, res));
   const v = await verificar(req).catch((e) => ({ erro: 'falha ao validar login: ' + e.message, status: 401 }));
   if (v.erro) return json(res, { erro: v.erro, precisaLogin: true }, v.status);
@@ -149,6 +149,28 @@ async function atender(req, res) {
     }
     if (rota === '/api/publico/config') return json(res, configPublica());
     if (rota.startsWith('/api/midia/')) return servirMiniatura(res, decodeURIComponent(rota.split('/').pop()));
+    if (rota.startsWith('/api/extensao/')) {
+      // Extensão do Chrome: autentica pela chave pessoal criada no painel (Configurações → Extensão).
+      res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Chave'); res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      if (req.method === 'OPTIONS') { res.statusCode = 204; return res.end(); }
+      await iniciar();
+      const chave = String(req.headers['x-chave'] || '');
+      const dono = chave.length >= 20 ? await get("SELECT user_id FROM prefs WHERE chave = 'extensao' AND valor = ?", [chave]) : null;
+      if (!dono) return json(res, { erro: 'chave da extensão inválida: copie a chave em Configurações → Extensão' }, 401);
+      return comUsuario({ id: dono.user_id }, async () => {
+        if (rota === '/api/extensao/salvar' && req.method === 'POST') {
+          const b = await corpo(req);
+          if (!b.page_id) return json(res, { erro: 'page_id obrigatório' }, 400);
+          await run(`INSERT INTO favoritos (user_id, tipo, chave, nome, nota, criado, atualizado) VALUES (?, 'pagina', ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, tipo, chave) DO UPDATE SET nome = excluded.nome, atualizado = excluded.atualizado`, [uid(), String(b.page_id), String(b.nome || '').slice(0, 140), 'salvo pela extensão', agora(), agora()]);
+          if (b.pais && b.anuncios) await run(`INSERT INTO historico_diario (page_id, pais, data, ativos) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+            [String(b.page_id), String(b.pais).toUpperCase().slice(0, 2), new Date().toISOString().slice(0, 10), Number(b.anuncios) || 0]).catch(() => {});
+          return json(res, { ok: true });
+        }
+        if (rota === '/api/extensao/status') return json(res, { ok: true });
+        return json(res, { erro: 'rota não encontrada' }, 404);
+      });
+    }
     if (rota.startsWith('/api/webhook/') && req.method === 'POST') {
       // Webhook do gateway: protegido pelo token secreto na URL (WEBHOOK_TOKEN). Não guarda nome, e-mail nem CPF do comprador.
       if (!process.env.WEBHOOK_TOKEN || q.token !== process.env.WEBHOOK_TOKEN) return json(res, { erro: 'token inválido' }, 403);
@@ -307,6 +329,24 @@ Dados: ${JSON.stringify(dados).slice(0, 6000)}`;
       if (rota === '/api/meta/conta') return json(res, await meta.checkupConta());
       if (rota === '/api/meta/desempenho') return json(res, await meta.desempenho({ dias: Number(q.dias || 7), ticket: Number(q.ticket || 0), cpaAlvo: Number(q.cpaAlvo || 0), cpaMax: Number(q.cpaMax || 0) }));
       return json(res, { erro: 'rota não encontrada' }, 404);
+    }
+    if (rota === '/api/extensao-chave') {
+      // Gera (ou mostra) a chave pessoal da extensão do Chrome.
+      let r = await get("SELECT valor FROM prefs WHERE user_id = ? AND chave = 'extensao'", [uid()]);
+      if (!r || req.method === 'POST') {
+        const nova = (await import('node:crypto')).randomBytes(24).toString('base64url');
+        await run("INSERT INTO prefs (user_id, chave, valor) VALUES (?, 'extensao', ?) ON CONFLICT(user_id, chave) DO UPDATE SET valor = excluded.valor", [uid(), nova]);
+        r = { valor: nova };
+      }
+      return json(res, { chave: r.valor });
+    }
+    if (rota.startsWith('/api/push/') || rota === '/api/alertas/teste' || rota === '/api/relatorio') {
+      const al = await import('./alertas.js');
+      if (rota === '/api/push/chave') { const k = await al.chavesVapid(); return json(res, { chave: k?.publicKey || null }); }
+      if (rota === '/api/push/inscrever' && req.method === 'POST') { await al.inscreverPush(uid(), (await corpo(req)).inscricao); return json(res, { ok: true }); }
+      if (rota === '/api/push/sair' && req.method === 'POST') { await al.sairPush((await corpo(req)).endpoint); return json(res, { ok: true }); }
+      if (rota === '/api/alertas/teste' && req.method === 'POST') return json(res, await al.avisar('🔔 Teste de alerta', 'Se você está lendo isto, os alertas estão funcionando.'));
+      if (rota === '/api/relatorio') return json(res, { ...(await al.relatorio({ pais })), telegram: !!process.env.TELEGRAM_BOT_TOKEN, canal: !!process.env.TELEGRAM_CANAL_ID, email: !!process.env.SMTP_USER });
     }
     if (rota === '/api/prefs' && req.method === 'GET') {
       const r = await get("SELECT valor FROM prefs WHERE user_id = ? AND chave = 'perfil'", [uid()]);

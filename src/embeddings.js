@@ -4,7 +4,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { all, run, get } from './db.js';
-import { usaPostgres } from './banco.js';
+import { usaPostgres, atualizarLote } from './banco.js';
 
 export const MODELO = 'Xenova/multilingual-e5-small';
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -43,11 +43,9 @@ export async function gerarEmbeddings({ limite = 1500, log = () => {}, temTempo 
     const lote = pendentes.slice(i, i + 32);
     const saida = await modelo(lote.map(textoDoAnuncio), { pooling: 'mean', normalize: true });
     const vetores = saida.tolist();
-    for (let j = 0; j < lote.length; j++) {
-      const v = vetores[j].map((x) => Math.round(x * 1e5) / 1e5);
-      if (usaPostgres) await run('UPDATE anuncios SET embedding = ?::vector WHERE ad_id = ?', ['[' + v.join(',') + ']', lote[j].ad_id]);
-      else await run('UPDATE anuncios SET embedding = ? WHERE ad_id = ?', [JSON.stringify(v), lote[j].ad_id]);
-    }
+    // Grava o lote inteiro num comando só (na nuvem, um UPDATE por anúncio custava uma viagem de rede cada).
+    await atualizarLote('anuncios', 'ad_id', [['embedding', usaPostgres ? 'vector' : 'text']],
+      lote.map((a, j) => { const v = vetores[j].map((x) => Math.round(x * 1e5) / 1e5); return [a.ad_id, usaPostgres ? '[' + v.join(',') + ']' : JSON.stringify(v)]; }));
     feitos += lote.length;
   }
   log(`  ${feitos} vetores gerados`);

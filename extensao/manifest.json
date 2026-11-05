@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Minerador · Biblioteca de Anúncios",
+  "version": "1.0.0",
+  "description": "Conta os anúncios de cada anunciante na Biblioteca de Anúncios, salva no Minerador com um clique e abre a análise do site.",
+  "icons": { "128": "icone.png" },
+  "permissions": ["storage"],
+  "action": { "default_title": "Minerador: configurar" },
+  "options_page": "opcoes.html",
+  "background": { "service_worker": "fundo.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://www.facebook.com/ads/library/*"],
+      "js": ["conteudo.js"],
+      "css": ["conteudo.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

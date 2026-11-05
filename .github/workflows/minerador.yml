@@ -45,4 +45,9 @@ jobs:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          TELEGRAM_CANAL_ID: ${{ secrets.TELEGRAM_CANAL_ID }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          ALERTA_EMAIL: ${{ secrets.ALERTA_EMAIL }}
+          PAINEL_URL: ${{ vars.PAINEL_URL }}
           LIMITE_PAGINAS_EXECUCAO: ${{ vars.LIMITE_PAGINAS_EXECUCAO || '500' }}

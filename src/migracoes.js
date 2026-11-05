@@ -175,4 +175,13 @@ export const MIGRACOES = [
       await rls(ctx, ['vendas']);
     },
   },
+  {
+    versao: 10,
+    nome: 'fase 9: notificações no navegador e controle de alertas já enviados',
+    up: async (ctx) => {
+      await ctx.ddl(`CREATE TABLE IF NOT EXISTS push_inscricoes (endpoint TEXT PRIMARY KEY, user_id TEXT, dados TEXT, criado BIGINT);
+        CREATE TABLE IF NOT EXISTS alertas_enviados (chave TEXT PRIMARY KEY, quando BIGINT);`);
+      await rls(ctx, ['push_inscricoes', 'alertas_enviados']);
+    },
+  },
 ];

@@ -353,6 +353,10 @@ async function rotina(ctx, o) {
   await salvarIdx();
   await processarFila(ctx, o);
   if (temTempo(4)) await loteIA(ctx, { ...o, pais }).catch((e) => log(`  IA: ${e.message}`));
+  const al = await import('./alertas.js');
+  await al.verificarAlertas({ pais, log }).catch((e) => log(`  alertas: ${e.message}`));
+  await al.ofertasDoDia({ pais, log }).catch((e) => log(`  canal: ${e.message}`));
+  await al.relatorioSemanal({ pais, log }).catch((e) => log(`  relatório: ${e.message}`));
 }
 
 // Retenção para caber nos 500 MB: texto completo só de anúncio ativo ou salvo; inativo há 60+ dias fora das listas é apagado.
@@ -362,6 +366,7 @@ async function manutencao(ctx, o) {
   await limparMiniaturas({ log });
   const apagar = await get(`SELECT COUNT(*) n FROM anuncios WHERE ativo = 0 AND inativo_desde < ? AND thumb_arquivo IS NULL AND ${foraDasListas}`, [t - 60 * 86400]);
   await run(`DELETE FROM anuncios WHERE ativo = 0 AND inativo_desde < ? AND thumb_arquivo IS NULL AND ${foraDasListas}`, [t - 60 * 86400]);
+  await run('DELETE FROM alertas_enviados WHERE quando < ?', [t - 60 * 86400]).catch(() => {});
   const { colunaVetorExiste } = await import('./embeddings.js');
   if (await colunaVetorExiste()) await run('UPDATE anuncios SET embedding = NULL WHERE ativo = 0 AND embedding IS NOT NULL');
   await run(`UPDATE anuncios SET texto = SUBSTR(texto, 1, 300) WHERE ativo = 0 AND inativo_desde < ? AND LENGTH(texto) > 300 AND ${foraDasListas}`, [t - 7 * 86400]);

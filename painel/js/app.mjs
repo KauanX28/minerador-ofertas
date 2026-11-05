@@ -22,6 +22,7 @@ import { TelaReferencias } from './telas/referencias.mjs';
 import { TelaEntregaveis, TelaEntregavel } from './telas/entregavel.mjs';
 import { TelaPaginas, TelaPagina } from './telas/paginas.mjs';
 import { TelaEscalar } from './telas/escalar.mjs';
+import { TelaRelatorio } from './telas/alertas.mjs';
 
 // O menu segue o caminho de trabalho: encontrar → validar → modelar → escalar.
 const MENU = [
@@ -30,7 +31,7 @@ const MENU = [
   ['2 · Validar', [['/sites', 'Análise de site', 'dominio']]],
   ['3 · Modelar', [['/prompts', 'Prompts de modelagem', 'prompts'], ['/editor', 'Editor de criativo', 'anuncios'], ['/video', 'Vídeo simples', 'raio'], ['/paginas', 'Página e quiz', 'dominio'], ['/entregavel', 'Entregável', 'metodo'], ['/referencias', 'Referências salvas', 'estrela']]],
   ['4 · Escalar', [['/calculadoras', 'Calculadoras e plano', 'calc'], ['/escalar', 'Anúncios e vendas', 'ofertas']]],
-  ['Trabalho', [['/listas', 'Minhas listas', 'listas']]],
+  ['Trabalho', [['/listas', 'Minhas listas', 'listas'], ['/relatorio', 'Relatório da semana', 'uso']]],
 ];
 const MENU_RODAPE = [['/minerar', 'Minerar agora', 'minerar'], ['/metodo', 'Método', 'metodo'], ['/uso', 'Uso e limites', 'uso'], ['/config', 'Configurações', 'config']];
 
@@ -58,6 +59,7 @@ const ROTAS = [
   [/^\/entregavel$/, () => html`<${TelaEntregaveis} />`],
   [/^\/paginas$/, () => html`<${TelaPaginas} />`],
   [/^\/escalar$/, () => html`<${TelaEscalar} />`],
+  [/^\/relatorio$/, () => html`<${TelaRelatorio} />`],
   [/^\/paginas\/(\d+)$/, (m) => html`<${TelaPagina} id=${m[1]} />`],
   [/^\/entregavel\/(\d+)$/, (m) => html`<${TelaEntregavel} id=${m[1]} />`],
 ];
