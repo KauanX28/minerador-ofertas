@@ -7,6 +7,7 @@ import {
   paisesComDados, rankingPaginas, recomendavel, notaRecomendacao, rankingDominios, rankingGateway, resumoGateways, detalhePagina, painelGeral, listaAnalises, listaFavoritos,
 } from './score.js';
 import { all, get, run, iniciar, agora, lerAnalise, lerConfig, salvarConfig } from './db.js';
+import { usaPostgres } from './banco.js';
 import { GATEWAYS, linksExternos, hostDe } from './util.js';
 import { authAtiva, configPublica, verificar } from './auth.js';
 import { comUsuario, uid } from './contexto.js';
@@ -21,13 +22,14 @@ const ORDENS = {
 };
 function filtrarRanking(lista, q) {
   const sim = (v) => v === '1' || v === 'true';
-  const busca = String(q.busca || '').toLowerCase();
+  const semAcento = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const busca = semAcento(q.busca);
   const nichos = String(q.nichos || '').split('|').filter(Boolean);
   const verMarcas = q.marcas === '1' || String(q.tipo || '').split(',').includes('marca');
   let r = lista.filter((x) => (verMarcas || x.tipo !== 'marca') && (!nichos.length || nichos.some((n) => (x.nichos || []).includes(n))) && (!q.status || x.status === q.status) && (!q.funil || x.funil === q.funil) && (!q.formato || x.formato === q.formato)
     && (!sim(q.vsl) || x.temVsl) && (!sim(q.quiz) || x.temQuiz) && (!sim(q.checkout) || x.checkoutConhecido) && (!sim(q.plr) || x.plr)
     && (!sim(q.acelerando) || ['Nova acelerando', 'Escalando agora'].includes(x.status)) && (!sim(q.gringa) || x.semEquivalenteBR)
-    && (!busca || [x.nome, x.produto, ...(x.dominios || [])].join(' ').toLowerCase().includes(busca)));
+    && (!busca || semAcento([x.nome, x.produto, x.titulo, x.texto, ...(x.dominios || [])].join(' ')).includes(busca)));
   if (q.ordem === 'oportunidade') r = r.filter(recomendavel);
   r = r.sort(q.ordem === 'oportunidade' ? (a, b) => notaRecomendacao(b) - notaRecomendacao(a) : ORDENS[q.ordem] || ORDENS.score);
   if (q.ids) { const ids = String(q.ids).split(','); r = lista.filter((x) => ids.includes(x.page_id)); }
@@ -68,7 +70,7 @@ async function acionarGithub() {
   const { GITHUB_TOKEN: token, GITHUB_REPO: repo } = process.env;
   const vivo = Number((await get("SELECT valor FROM ajustes WHERE chave = 'fila_viva'").catch(() => null))?.valor || 0);
   if (Date.now() / 1000 - vivo < 25) return 'o robô já está de prontidão: começa em segundos';
-  if (!token || !repo) return 'sem GITHUB_TOKEN/GITHUB_REPO: a fila será processada na próxima rodada agendada';
+  if (!token || !repo) return 'Pedido anotado: o robô começa em 5 a 15 minutos. Para começar na hora, faça o passo 0 do configurar-chaves.ps1 (token do GitHub).';
   const r = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/minerador.yml/dispatches`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'minerador-ofertas' },
@@ -427,7 +429,12 @@ Dados: ${JSON.stringify(dados).slice(0, 6000)}`;
       // Biblioteca de criativos salvos (swipe): filtros por texto, formato e mínimo de duplicações.
       const filtros = ['ativo = 1', 'pais = ?'], p = [pais];
       if (q.marcas !== '1') filtros.push("page_id NOT IN (SELECT page_id FROM paginas WHERE tipo = 'marca')");
-      if (q.texto) { filtros.push('(LOWER(texto) LIKE ? OR LOWER(titulo) LIKE ? OR LOWER(page_name) LIKE ?)'); const t = `%${q.texto.toLowerCase()}%`; p.push(t, t, t); }
+      if (q.texto) {
+        // Sem acento no Postgres ("biblico" acha "bíblico"); no modo local, comparação simples.
+        const sa = (c) => (usaPostgres ? `translate(LOWER(${c}), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc')` : `LOWER(${c})`);
+        filtros.push(`(${sa('texto')} LIKE ? OR ${sa('titulo')} LIKE ? OR ${sa('page_name')} LIKE ?)`);
+        const t = `%${String(q.texto).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')}%`; p.push(t, t, t);
+      }
       if (q.formato) { filtros.push('formato = ?'); p.push(q.formato); }
       if (q.dup) { filtros.push('dup >= ?'); p.push(Number(q.dup)); }
       if (q.cta) { filtros.push('LOWER(cta) LIKE ?'); p.push(`%${q.cta.toLowerCase()}%`); }

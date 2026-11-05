@@ -1,0 +1,53 @@
+# Pedidos do painel sem precisar de token: a cada 5 minutos confere se há pedido esperando (ex.: escolheu um nicho,
+# clicou em "Buscar agora") e, se houver, acorda o robô, que fica de prontidão por 10 minutos.
+# Com GITHUB_TOKEN na Vercel o painel acorda o robô na hora; isto é o plano B (o GitHub pode atrasar o agendamento).
+name: fila
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: minerador-fila
+  cancel-in-progress: false
+
+jobs:
+  checar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --omit=optional
+      - name: Tem pedido esperando?
+        id: fila
+        run: node --no-warnings src/tem-fila.js
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: Cache do navegador
+        if: steps.fila.outputs.pendente == '1'
+        id: cache-navegador
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('package-lock.json') }}
+      - name: Instalar navegador
+        if: steps.fila.outputs.pendente == '1' && steps.cache-navegador.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Atender os pedidos
+        if: steps.fila.outputs.pendente == '1'
+        run: node --no-warnings src/tarefa.js fila --esperar 10
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          PAINEL_URL: ${{ vars.PAINEL_URL }}
