@@ -20,6 +20,7 @@ import { processarMiniaturas, limparMiniaturas } from './midia.js';
 import { usoELimites } from './uso.js';
 import { enriquecerTudo } from './enriquecer.js';
 import { validarDominio } from './validacao.js';
+import { rankingPaginas } from './score.js';
 import { gerar, provedores, promptAnaliseCriativo, validarAnalise } from './ia.js';
 import { transcreverAnuncio, lerTranscricao } from './transcricao.js';
 import { idiomaDoPais } from './classificador.js';
