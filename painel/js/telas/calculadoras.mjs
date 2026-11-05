@@ -1,12 +1,36 @@
 // Calculadoras e plano de campanha: confere se a oferta para em pé antes de investir.
 import { useState } from 'preact/hooks';
-import { html, brl } from '../base.mjs';
+import { html, brl, copiar } from '../base.mjs';
+import { Ic } from '../ui.mjs';
 
 const Campo = ({ rot, v, set, passo = '0.01' }) => html`<label class="campo">${rot}<input type="number" step=${passo} value=${v} onInput=${(e) => set(Number(e.target.value) || 0)} /></label>`;
 const Caixa = ({ rot, val, sub, cor }) => html`<div class="res-box"><span class="peq mut">${rot}</span><div class="res" style=${cor ? `color:${cor}` : ''}>${val}</div>${sub ? html`<span class="peq mut">${sub}</span>` : null}</div>`;
 function useNum(chave, padrao) {
   const [v, set] = useState(Number(localStorage['calc_' + chave] ?? padrao));
   return [v, (n) => { localStorage['calc_' + chave] = n; set(n); }];
+}
+
+// UTMs para rastrear a venda até o criativo (formato com parâmetros dinâmicos da Meta) e checklist de rastreamento.
+function Rastreamento() {
+  const [url, setUrl] = useState(localStorage.utmUrl || ''), [camp, setCamp] = useState('');
+  const dinamico = 'utm_source=FB&utm_campaign={{campaign.name}}|{{campaign.id}}&utm_medium={{adset.name}}|{{adset.id}}&utm_content={{ad.name}}|{{ad.id}}&utm_term={{placement}}';
+  const manual = `utm_source=facebook&utm_medium=paid&utm_campaign=${encodeURIComponent(camp || 'campanha')}`;
+  const junta = (u, q) => (u ? u + (u.includes('?') ? '&' : '?') + q : q);
+  const ITENS = ['Pixel da Meta instalado na página e no checkout (pelo próprio gateway)', 'Eventos: PageView, ViewContent, InitiateCheckout e Purchase aparecendo no Gerenciador de Eventos',
+    'API de Conversões ligada (a maioria dos gateways faz isso na integração com o pixel)', 'Domínio verificado no Gerenciador de Negócios', 'Eventos sem duplicidade (mesmo event_id no pixel e na API)',
+    'UTMs em todos os anúncios (use o modelo dinâmico abaixo)', 'Página carrega em menos de 3 s no celular (teste no PageSpeed)', 'Teste de compra feito do anúncio até o e-mail de entrega'];
+  const [, r] = useState(0);
+  return html`<div class="secao"><div class="secao-cab"><h2>Rastreamento</h2><span class="mut peq">UTMs e checklist de pixel</span></div><div class="grade-2">
+    <div class="painel-box"><div class="pb-cab"><h2>Gerador de UTMs</h2></div><div class="pb-corpo col-gap">
+      <label class="campo">Link da página ou do checkout<input value=${url} onInput=${(e) => { setUrl(e.target.value); localStorage.utmUrl = e.target.value; }} placeholder="https://..." /></label>
+      <div class="campo">Parâmetros dinâmicos da Meta (preenchem sozinhos com campanha, conjunto e anúncio)<pre class="prompt">${dinamico}</pre>
+        <button class="bt-p" onClick=${() => copiar(dinamico)}><${Ic} n="copiar" /> Copiar para "Parâmetros de URL" do anúncio</button></div>
+      <label class="campo">Ou um link fixo: nome da campanha<input value=${camp} onInput=${(e) => setCamp(e.target.value)} placeholder="teste-pilates-21d" /></label>
+      <pre class="prompt">${junta(url, manual)}</pre><button class="bt-p" onClick=${() => copiar(junta(url, manual))}><${Ic} n="copiar" /> Copiar link</button>
+      <p class="mut peq" style="margin:0">As páginas e quizzes exportados aqui repassam as UTMs para o link do checkout, então a venda aparece com a origem no gateway.</p></div></div>
+    <div class="painel-box"><div class="pb-cab"><h2>Checklist de rastreamento</h2></div><div class="pb-corpo">
+      ${ITENS.map((it, i) => html`<label class="check" style="cursor:pointer"><input type="checkbox" checked=${!!localStorage['rast' + i]} onChange=${(e) => { if (e.target.checked) localStorage['rast' + i] = 1; else delete localStorage['rast' + i]; r((n) => n + 1); }} /> <span>${it}</span></label>`)}
+      <a class="botao" style="margin-top:8px" href="https://pagespeed.web.dev/" target="_blank" rel="noopener">Testar velocidade (PageSpeed) <${Ic} n="externo" t=${12} /></a></div></div></div></div>`;
 }
 
 export function TelaCalculadoras() {
@@ -47,6 +71,7 @@ export function TelaCalculadoras() {
         <div class="grade-3 secao"><${Caixa} rot="Vendas por dia" val=${vendas.toFixed(1)} /><${Caixa} rot="Lucro por dia" val=${brl(lucro)} cor=${lucro >= 0 ? 'var(--ok)' : 'var(--erro)'} /><${Caixa} rot="Lucro em 30 dias" val=${brl(lucro * 30)} /></div>
         <p class="peq mut">Usa o ticket médio líquido calculado ao lado.</p></div></div>
     </div>
+    <${Rastreamento} />
     <div class="secao"><div class="secao-cab"><h2>Checklist de lançamento</h2><span class="mut peq">${feitos} concluídos</span></div>
       <div class="grade-3">${checklist.map(([sec, itens], si) => html`<div class="painel-box"><div class="pb-cab"><h2>${sec}</h2></div><div class="pb-corpo">
         ${itens.map((it, ii) => html`<label class="check" style="cursor:pointer"><input type="checkbox" checked=${!!localStorage['ck' + si + '-' + ii]}
