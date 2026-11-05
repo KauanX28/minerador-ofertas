@@ -118,4 +118,24 @@ export const MIGRACOES = [
       await rls(ctx, ['cambio', 'ofertas', 'oferta_membros']);
     },
   },
+  {
+    versao: 4,
+    nome: 'fase 3: pastas nas listas de trabalho',
+    up: async ({ ddl, colunas }) => {
+      if (!(await colunas('favoritos')).includes('pasta')) await ddl("ALTER TABLE favoritos ADD COLUMN pasta TEXT DEFAULT ''");
+      await ddl('CREATE INDEX IF NOT EXISTS ix_paginas_nome ON paginas(nome)');
+    },
+  },
+  {
+    versao: 5,
+    nome: 'fase 3: busca por significado (vetores dos anúncios ativos)',
+    up: async ({ pg, ddl, colunas }) => {
+      if ((await colunas('anuncios')).includes('embedding')) return;
+      if (!pg) { await ddl('ALTER TABLE anuncios ADD COLUMN embedding TEXT'); return; }
+      // pgvector é grátis no Supabase. Se o banco não tiver a extensão, a busca por significado fica desligada.
+      try { await ddl('CREATE EXTENSION IF NOT EXISTS vector'); } catch (e) { console.log('  pgvector indisponível: ' + e.message); return; }
+      await ddl('ALTER TABLE anuncios ADD COLUMN embedding vector(384)');
+      await ddl('CREATE INDEX IF NOT EXISTS ix_anuncios_embedding ON anuncios USING hnsw (embedding vector_cosine_ops)');
+    },
+  },
 ];

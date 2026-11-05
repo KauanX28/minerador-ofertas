@@ -114,6 +114,8 @@ export async function rankingPaginas({ pais = 'BR', nicho = '', min = 0, busca =
     all(`SELECT texto_hash, COUNT(DISTINCT page_id) n FROM anuncios WHERE ativo = 1 AND pais = ? AND texto_hash IS NOT NULL AND texto_hash <> 'x' GROUP BY texto_hash HAVING COUNT(DISTINCT page_id) > 1`, [pais]),
     all('SELECT m.page_id, MAX(o.paginas) n, MAX(o.id) oferta_id FROM oferta_membros m JOIN ofertas o ON o.id = m.oferta_id WHERE o.pais = ? GROUP BY m.page_id', [pais]),
   ]);
+  // Criativos que já rodam no Brasil: oferta gringa "sem equivalente" é a que não tem nenhum deles.
+  const phashBR = pais === 'BR' ? new Set() : new Set((await all("SELECT DISTINCT phash FROM anuncios WHERE ativo = 1 AND pais = 'BR' AND phash IS NOT NULL AND phash <> '-'")).map((r) => r.phash));
   const contasCk = new Map(contasOferta.map((r) => [r.page_id, r]));
   const ultimo = new Map(ult.map((r) => [r.page_id, r]));
   const serie = new Map();
@@ -181,6 +183,10 @@ export async function rankingPaginas({ pais = 'BR', nicho = '', min = 0, busca =
     const novos7 = lista.filter((a) => a.inicio && agora - a.inicio <= 7 * DIA).length;
     const idadeCampeao = top.inicio ? Math.floor((agora - top.inicio) / DIA) : null;
     const contasCheckout = Number(contasCk.get(p.page_id)?.n || 1);
+    const formatos = {};
+    for (const a of lista) if (a.formato) formatos[a.formato] = (formatos[a.formato] || 0) + 1;
+    const an0 = listaDom.map((d) => analises.get(d.split('/')[0])).find(Boolean);
+    const textoTodo = `${p.nome} ${lista.slice(0, 30).map((a) => `${a.titulo || ''} ${a.texto || ''}`).join(' ')}`;
     const av = avaliar({ ativos, dias, dupMax, crescimentoPct, var7, var14, var30, contasCheckout, contasMesmoCriativo,
       novos7, diasConsistentes: diasSeguidos(serie.get(p.page_id)), idadeCampeao });
     saida.push({
@@ -191,6 +197,12 @@ export async function rankingPaginas({ pais = 'BR', nicho = '', min = 0, busca =
       dominios: listaDom, gateways: [...gws].map(nomeGateway), preco, precoBrl, precoOrigem, produto, funil: formatoFunil,
       tipo: p.tipo || 'indefinido', tipoMotivo: p.tipo_motivo || '', idioma: p.idioma || null, contasMesmoCriativo,
       var7, var14, var30, novos7, contasCheckout, ofertaId: contasCk.get(p.page_id)?.oferta_id || null,
+      serie: (serie.get(p.page_id) || []).map((x) => [x.data, x.ativos]),
+      formato: Object.entries(formatos).sort((a, b) => b[1] - a[1])[0]?.[0] || null,
+      temVsl: !!an0?.tecnologia?.vsl?.length, temQuiz: !!an0?.tecnologia?.quiz?.length,
+      checkoutConhecido: gws.size > 0 || precoOrigem === 'checkout',
+      plr: /\bplr\b|direitos? de revenda|licen[cç]a de revenda|revenda e lucre|private label/i.test(textoTodo),
+      semEquivalenteBR: pais !== 'BR' && !JSON.parse(p.paises || '[]').includes('BR') && !lista.some((a) => a.phash && phashBR.has(a.phash)),
       thumb: top.thumb || null, titulo: top.titulo || '', texto: top.texto || '',
       favorito: favs.has(p.page_id),
       score: av.score, status: av.status, oportunidade: av.oportunidade, motivoOport: av.motivoOport, fatores: av.fatores,
@@ -299,7 +311,17 @@ export async function detalhePagina(pageId, pais = 'BR') {
     all('SELECT data, ativos FROM historico_diario WHERE page_id = ? AND pais = ? ORDER BY data', [pageId, pais]),
   ]);
   for (const a of anuncios) if (a.thumb_arquivo) a.thumb = `/api/midia/${a.ad_id}`;
-  return { pagina: ranking.find((x) => x.page_id === pageId), anuncios, historico };
+  const pagina = ranking.find((x) => x.page_id === pageId) || null;
+  // Página da oferta: grupo (outras páginas no mesmo checkout/site), análise do site principal e checkouts com preço.
+  const grupo = pagina?.ofertaId ? await all(`SELECT m.page_id, p.nome, p.foto, m.dominio FROM oferta_membros m JOIN paginas p ON p.page_id = m.page_id
+    WHERE m.oferta_id = ? AND m.page_id <> ?`, [pagina.ofertaId, pageId]) : [];
+  const dominio = pagina?.dominios?.[0]?.split('/')[0];
+  const analiseRow = dominio ? await get('SELECT dados, quando FROM analises WHERE dominio = ?', [dominio]) : null;
+  const analise = analiseRow ? { ...JSON.parse(analiseRow.dados), quando: analiseRow.quando } : null;
+  const cks = [...new Set([...anuncios.map((a) => a.checkout), ...(analise?.checkouts || []).map((c) => c.checkout)].filter(Boolean))];
+  const checkouts = cks.length ? await all(`SELECT checkout, gateway, url, produto, preco, preco_brl, ok, analisado FROM checkouts WHERE checkout IN (${cks.map(() => '?').join(', ')})`, cks) : [];
+  const nomes = new Map(ranking.map((x) => [x.page_id, x]));
+  return { pagina, anuncios, historico, grupo: grupo.map((g) => ({ ...g, ativos: nomes.get(g.page_id)?.ativos ?? null, score: nomes.get(g.page_id)?.score ?? null })), analise, checkouts };
 }
 
 export async function listaAnalises() {

@@ -13,6 +13,26 @@ import { comUsuario, uid } from './contexto.js';
 import { servirMiniatura } from './midia.js';
 import { usoELimites } from './uso.js';
 
+// Filtros, ordenação e paginação do ranking feitos no servidor (a interface recebe só a página pedida).
+const ORDENS = {
+  score: (a, b) => b.score - a.score, oportunidade: (a, b) => b.oportunidade - a.oportunidade, ativos: (a, b) => b.ativos - a.ativos,
+  crescimento: (a, b) => (b.var7 ?? b.crescimento ?? -1e9) - (a.var7 ?? a.crescimento ?? -1e9), novos: (a, b) => a.dias - b.dias || b.score - a.score,
+  dias: (a, b) => b.dias - a.dias, preco: (a, b) => (a.precoBrl ?? 1e9) - (b.precoBrl ?? 1e9),
+};
+function filtrarRanking(lista, q) {
+  const sim = (v) => v === '1' || v === 'true';
+  const busca = String(q.busca || '').toLowerCase();
+  const nichos = String(q.nichos || '').split('|').filter(Boolean);
+  let r = lista.filter((x) => (!nichos.length || nichos.some((n) => (x.nichos || []).includes(n))) && (!q.status || x.status === q.status) && (!q.funil || x.funil === q.funil) && (!q.formato || x.formato === q.formato)
+    && (!sim(q.vsl) || x.temVsl) && (!sim(q.quiz) || x.temQuiz) && (!sim(q.checkout) || x.checkoutConhecido) && (!sim(q.plr) || x.plr)
+    && (!sim(q.acelerando) || ['Nova acelerando', 'Escalando agora'].includes(x.status)) && (!sim(q.gringa) || x.semEquivalenteBR)
+    && (!busca || [x.nome, x.produto, ...(x.dominios || [])].join(' ').toLowerCase().includes(busca)));
+  r = r.sort(ORDENS[q.ordem] || ORDENS.score);
+  if (q.ids) { const ids = String(q.ids).split(','); r = lista.filter((x) => ids.includes(x.page_id)); }
+  const por = Math.min(Math.max(Number(q.por || 48), 1), 200), pagina = Math.max(Number(q.pagina || 1), 1);
+  return { total: r.length, pagina, por, itens: r.slice((pagina - 1) * por, pagina * por) };
+}
+
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const NUVEM = !!process.env.VERCEL || process.env.MODO === 'nuvem';
 
@@ -88,12 +108,14 @@ const corpo = (req) => new Promise((ok) => {
   let d = ''; req.on('data', (c) => (d += c));
   req.on('end', () => { try { ok(JSON.parse(d || '{}')); } catch { ok({}); } });
 });
-const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.md': 'text/markdown; charset=utf-8', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json' };
+const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.webmanifest': 'application/manifest+json', '.webp': 'image/webp', '.ico': 'image/x-icon', '.md': 'text/markdown; charset=utf-8', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json' };
 
 function servirEstatico(res, rota) {
   const base = path.join(raiz, 'painel');
-  const alvo = path.normalize(path.join(base, rota === '/' ? 'index.html' : decodeURIComponent(rota)));
-  if (!alvo.startsWith(base) || !fs.existsSync(alvo) || fs.statSync(alvo).isDirectory()) return false;
+  let alvo = path.normalize(path.join(base, rota === '/' ? 'index.html' : decodeURIComponent(rota)));
+  if (!alvo.startsWith(base)) return false;
+  if ((!fs.existsSync(alvo) || fs.statSync(alvo).isDirectory()) && !path.extname(rota)) alvo = path.join(base, 'index.html'); // rota da SPA
+  if (!fs.existsSync(alvo) || fs.statSync(alvo).isDirectory()) return false;
   res.statusCode = 200;
   res.setHeader('Content-Type', TIPOS[path.extname(alvo)] || 'application/octet-stream');
   res.end(fs.readFileSync(alvo));
@@ -132,14 +154,46 @@ async function atender(req, res) {
     const pais = String(q.pais || 'BR').toUpperCase();
     if (rota === '/api/paises') return json(res, await paisesComDados());
     if (rota === '/api/painel') return json(res, await painelGeral(pais));
-    if (rota === '/api/paginas') return json(res, await rankingPaginas({ pais,
-      nicho: q.nicho || '', min: Number(q.min || 0), busca: q.busca || '', minDias: Number(q.dias || 0), gateway: q.gateway || '',
-      tipo: q.tipo ?? 'low', precoMax: Number(q.precoMax || 0), semPreco: q.semPreco !== '0', idioma: q.idioma || '',
-    }));
+    if (rota === '/api/paginas') {
+      const tipos = q.ids ? [] : String(q.tipo ?? 'low').split(',').filter(Boolean);
+      const lista = (await rankingPaginas({ pais, nicho: q.nicho || '', min: Number(q.min || 0), minDias: Number(q.dias || 0), gateway: q.gateway || '',
+        tipo: tipos.length === 1 ? tipos[0] : '', precoMax: q.ids ? 0 : Number(q.precoMax || 0), semPreco: q.semPreco !== '0', idioma: q.idioma || '' }))
+        .filter((x) => tipos.length < 2 || tipos.includes(x.tipo));
+      return json(res, filtrarRanking(lista, q));
+    }
+    if (rota === '/api/busca') {
+      // Autocompletar da busca global: anunciantes, sites, checkouts e gateways num resultado só.
+      const t = `%${String(q.q || '').toLowerCase().trim()}%`;
+      if (t.length < 4) return json(res, { anunciantes: [], dominios: [], checkouts: [], gateways: [] });
+      const [anunciantes, dominios, checkouts] = await Promise.all([
+        all(`SELECT p.page_id, p.nome, p.foto, MAX(h.ativos) ativos FROM paginas p LEFT JOIN historico_diario h ON h.page_id = p.page_id AND h.pais = ?
+          WHERE LOWER(p.nome) LIKE ? GROUP BY p.page_id, p.nome, p.foto ORDER BY MAX(h.ativos) DESC LIMIT 6`, [pais, t]),
+        all(`SELECT dominio, COUNT(*) n FROM anuncios WHERE ativo = 1 AND pais = ? AND LOWER(dominio) LIKE ? GROUP BY dominio ORDER BY COUNT(*) DESC LIMIT 5`, [pais, t]),
+        all('SELECT checkout, gateway, produto, preco FROM checkouts WHERE LOWER(checkout) LIKE ? OR LOWER(produto) LIKE ? LIMIT 5', [t, t]),
+      ]);
+      const gws = GATEWAYS.filter((g) => `${g.id} ${g.nome} ${g.raiz}`.toLowerCase().includes(t.slice(1, -1))).slice(0, 4).map((g) => ({ id: g.id, nome: g.nome }));
+      return json(res, { anunciantes, dominios, checkouts, gateways: gws });
+    }
+    if (rota === '/api/busca-semantica' && req.method === 'POST') {
+      const b = await corpo(req);
+      const { buscarPorSignificado, colunaVetorExiste } = await import('./embeddings.js');
+      if (!(await colunaVetorExiste())) return json(res, { erro: 'Busca por significado ainda não ativada no banco.' }, 400);
+      return json(res, await buscarPorSignificado(b.vetor, String(b.pais || pais).toUpperCase(), Math.min(Number(b.limite || 48), 120)));
+    }
+    if (rota === '/api/prefs' && req.method === 'GET') {
+      const r = await get("SELECT valor FROM prefs WHERE user_id = ? AND chave = 'perfil'", [uid()]);
+      return json(res, r ? JSON.parse(r.valor) : {});
+    }
+    if (rota === '/api/prefs' && req.method === 'POST') {
+      const b = await corpo(req);
+      await run("INSERT INTO prefs (user_id, chave, valor) VALUES (?, 'perfil', ?) ON CONFLICT(user_id, chave) DO UPDATE SET valor = excluded.valor", [uid(), JSON.stringify(b)]);
+      return json(res, { ok: true });
+    }
     if (rota === '/api/ofertas-agrupadas') {
       // Oferta = checkout (ou site): várias páginas no mesmo checkout aparecem juntas.
       const f = ['pais = ?'], p = [pais];
-      if (q.tipo ?? 'low') { f.push("COALESCE(tipo, 'indefinido') = ?"); p.push(q.tipo ?? 'low'); }
+      const tiposCk = String(q.tipo ?? 'low').split(',').filter(Boolean);
+      if (tiposCk.length) { f.push(`COALESCE(tipo, 'indefinido') IN (${tiposCk.map(() => '?').join(', ')})`); p.push(...tiposCk); }
       if (Number(q.precoMax)) { f.push(q.semPreco !== '0' ? '(preco_brl IS NULL OR preco_brl <= ?)' : 'preco_brl <= ?'); p.push(Number(q.precoMax)); }
       if (q.idioma) { f.push('(idioma IS NULL OR idioma = ?)'); p.push(q.idioma); }
       if (q.gateway) { f.push('gateway = ?'); p.push(q.gateway); }
@@ -179,10 +233,15 @@ async function atender(req, res) {
     if (rota === '/api/favoritos' && req.method === 'POST') {
       const b = await corpo(req);
       if (!b.tipo || !b.chave) return json(res, { erro: 'tipo e chave obrigatórios' }, 400);
-      if (b.remover) await run('DELETE FROM favoritos WHERE user_id = ? AND tipo = ? AND chave = ?', [uid(), b.tipo, String(b.chave)]);
-      else await run(`INSERT INTO favoritos (user_id, tipo, chave, nome, nota, criado, atualizado) VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(user_id, tipo, chave) DO UPDATE SET nome = excluded.nome, nota = excluded.nota, atualizado = excluded.atualizado`,
-        [uid(), b.tipo, String(b.chave), b.nome || '', b.nota || '', agora(), agora()]);
+      const chave = [uid(), b.tipo, String(b.chave)];
+      if (b.remover) { await run('DELETE FROM favoritos WHERE user_id = ? AND tipo = ? AND chave = ?', chave); return json(res, { ok: true }); }
+      const atual = await get('SELECT * FROM favoritos WHERE user_id = ? AND tipo = ? AND chave = ?', chave);
+      // Atualização parcial: só muda o que veio (etapa do funil, tags, pasta, nota ou nome).
+      const v = { nome: b.nome ?? atual?.nome ?? '', nota: b.nota ?? atual?.nota ?? '', etapa: b.etapa ?? atual?.etapa ?? 'minerada',
+        tags: JSON.stringify(b.tags ?? JSON.parse(atual?.tags || '[]')), pasta: b.pasta ?? atual?.pasta ?? '' };
+      await run(`INSERT INTO favoritos (user_id, tipo, chave, nome, nota, etapa, tags, pasta, criado, atualizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, tipo, chave) DO UPDATE SET nome = excluded.nome, nota = excluded.nota, etapa = excluded.etapa, tags = excluded.tags,
+          pasta = excluded.pasta, atualizado = excluded.atualizado`, [...chave, v.nome, v.nota, v.etapa, v.tags, v.pasta, agora(), agora()]);
       return json(res, { ok: true });
     }
 

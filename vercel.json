@@ -3,6 +3,6 @@
   "buildCommand": "echo sem build",
   "installCommand": "npm install --omit=optional --ignore-scripts",
   "outputDirectory": "painel",
-  "rewrites": [{ "source": "/api/(.*)", "destination": "/api" }],
+  "rewrites": [{ "source": "/api/(.*)", "destination": "/api" }, { "source": "/((?!api/).*)", "destination": "/index.html" }],
   "functions": { "api/index.js": { "maxDuration": 30 } }
 }

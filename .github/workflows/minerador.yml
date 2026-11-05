@@ -27,6 +27,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Cache do modelo de busca por significado
+        uses: actions/cache@v4
+        with:
+          path: .cache/modelos
+          key: modelo-e5-small-v1
       - name: Instalar navegador
         run: npx playwright install --with-deps chromium
       - name: Rodar tarefa

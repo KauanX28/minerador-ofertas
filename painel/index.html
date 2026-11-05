@@ -2,50 +2,33 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<title>Minerador de Ofertas</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23101828'/><text x='16' y='22' font-family='Arial' font-weight='700' font-size='17' fill='white' text-anchor='middle'>M</text></svg>">
-<script>document.documentElement.dataset.tema = localStorage.tema || 'claro';</script>
+<title>Minerador · ofertas low ticket escaladas</title>
+<meta name="description" content="Encontre ofertas low ticket já escaladas na Biblioteca de Anúncios, valide, modele e escale. Grátis.">
+<meta name="theme-color" content="#0b1220">
+<meta property="og:title" content="Minerador · ofertas low ticket escaladas">
+<meta property="og:description" content="Encontre, valide, modele e escale ofertas low ticket com dados da Biblioteca de Anúncios.">
+<meta property="og:image" content="/og.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/icone.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icone-192.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<script>document.documentElement.dataset.tema = localStorage.tema || (matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro');</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="/estilo.css">
+<script type="importmap">{ "imports": { "preact": "/vendor/preact.mjs", "preact/hooks": "/vendor/hooks.mjs", "htm": "/vendor/htm.mjs" } }</script>
 </head>
 <body>
-<aside id="menu">
-  <div class="marca"><span class="logo">M</span>Minerador</div>
-  <nav id="nav"></nav>
-  <div class="menu-rodape">Dados: Biblioteca de Anúncios da Meta</div>
-</aside>
-<div class="area">
-  <header id="topo">
-    <form class="busca" id="buscaGlobal" autocomplete="off">
-      <select id="buscaTipo" title="Tipo de busca">
-        <option value="auto">Auto</option><option value="palavra">Palavra-chave</option>
-        <option value="dominio">Domínio / URL</option><option value="gateway">Gateway</option>
-      </select>
-      <input id="buscaTermo" placeholder="Palavra-chave, domínio, link de checkout ou gateway (ex.: kiwify)">
-      <button type="submit">Buscar</button>
-    </form>
-    <div class="direita">
-      <div id="statusTarefa" class="status-tarefa"></div>
-      <select id="paisGlobal" title="País dos dados exibidos"></select>
-      <button class="bt-ic" id="btTema" title="Alternar tema claro/escuro"></button>
-      <button class="bt-ic" id="btSair" hidden></button>
-    </div>
-  </header>
-  <main id="conteudo"></main>
-</div>
-
-<div id="gaveta" class="gaveta"><div class="gaveta-topo"><div id="gavetaTitulo"></div><button class="bt-ic" onclick="fecharGaveta()" title="Fechar" id="btFechar"></button></div><div id="gavetaCorpo" class="gaveta-corpo"></div></div>
-<div id="fundo" class="fundo" onclick="fecharGaveta()"></div>
-<div id="toast" class="toast"></div>
-
+<div id="app"></div>
+<noscript>Ative o JavaScript para usar o Minerador.</noscript>
 <script src="/vendor/marked.js"></script>
 <script src="/vendor/supabase.js"></script>
 <script src="/conhecimento.js"></script>
 <script src="/prompts.js"></script>
-<script src="/app.js"></script>
+<script type="module" src="/js/app.mjs"></script>
 </body>
 </html>

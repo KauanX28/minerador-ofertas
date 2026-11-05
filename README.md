@@ -113,6 +113,19 @@ $env:DATABASE_URL = "postgresql://..."; node --no-warnings src/tarefa.js fila
 
 ---
 
+## Como a interface é organizada
+
+O menu segue o caminho de trabalho: **1 Encontrar** (Ofertas, Criativos, Gateways) → **2 Validar** (Análise de site) → **3 Modelar** (Prompts) → **4 Escalar** (Calculadoras), mais **Minhas listas** (funil Minerada → Validando → Modelando → Testando → Escalando → Descartada).
+
+- No primeiro acesso, 3 perguntas (nichos, país e nível) ajustam o que aparece primeiro.
+- Cada oferta tem página própria (`/oferta/<id>`) com as abas Visão geral, Criativos, Funil, Página, Checkout, Histórico e Modelar.
+- Os filtros ficam na URL: dá para salvar ou compartilhar uma busca.
+- A busca do topo completa com anunciantes, sites, checkouts e gateways.
+- **Busca por significado** (em Criativos): o robô gera vetores dos anúncios ativos com o modelo `multilingual-e5-small` (pgvector no Supabase). A frase digitada vira vetor no próprio navegador; na primeira vez ele baixa o modelo, cerca de 120 MB, e guarda.
+- Instalável como app (PWA) no celular e no computador.
+
+A interface usa Preact + htm sem etapa de build (arquivos em `painel/js`), então o modo local e a Vercel servem os mesmos arquivos.
+
 ## Limitações
 
 - A Meta não divulga gasto nem faturamento de anúncios comerciais no Brasil. Nenhuma ferramenta tem esse dado; as

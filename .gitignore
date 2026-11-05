@@ -7,3 +7,4 @@ dados/
 .vercel
 .env*
 .claude/
+.cache/

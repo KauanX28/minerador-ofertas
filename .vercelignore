@@ -2,3 +2,4 @@ dados/
 *.cmd
 .github/
 .claude
+.cache

@@ -352,6 +352,8 @@ async function manutencao(ctx, o) {
   await limparMiniaturas({ log });
   const apagar = await get(`SELECT COUNT(*) n FROM anuncios WHERE ativo = 0 AND inativo_desde < ? AND thumb_arquivo IS NULL AND ${foraDasListas}`, [t - 60 * 86400]);
   await run(`DELETE FROM anuncios WHERE ativo = 0 AND inativo_desde < ? AND thumb_arquivo IS NULL AND ${foraDasListas}`, [t - 60 * 86400]);
+  const { colunaVetorExiste } = await import('./embeddings.js');
+  if (await colunaVetorExiste()) await run('UPDATE anuncios SET embedding = NULL WHERE ativo = 0 AND embedding IS NOT NULL');
   await run(`UPDATE anuncios SET texto = SUBSTR(texto, 1, 300) WHERE ativo = 0 AND inativo_desde < ? AND LENGTH(texto) > 300 AND ${foraDasListas}`, [t - 7 * 86400]);
   await run('DELETE FROM coletas WHERE quando < ?', [t - 30 * 86400]);
   await run("DELETE FROM tarefas WHERE status <> 'pendente' AND criado < ?", [t - 30 * 86400]);
@@ -363,11 +365,15 @@ async function manutencao(ctx, o) {
   if (errosHoje >= 5) await alertar(`${errosHoje} coletas com erro nas últimas 24 h. Último: ${uso.raspador.ultimoErro?.erro || '?'}`, { log });
 }
 
-async function enriquecer() { await processarMiniaturas({ limite: 300, log }); await enriquecerTudo({ log }); }
+async function enriquecer() { await processarMiniaturas({ limite: 300, log }); await enriquecerTudo({ log }); await vetores(); }
+async function vetores(_, o = {}) {
+  try { const { gerarEmbeddings } = await import('./embeddings.js'); await gerarEmbeddings({ limite: Number(o.limite || 1500), log, temTempo }); }
+  catch (e) { log(`  busca por significado: ${e.message}`); }
+}
 async function sites(ctx, o) { await enriquecerDominios(ctx, o, { limite: Number(o.limite || 10), minAnuncios: Number(o.min || 8) }); }
 
-const TAREFAS = { minerar, gateway, analisar, atualizar, rotina, manutencao, enriquecer, sites, fila: processarFila };
-const SEM_NAVEGADOR = new Set(['manutencao', 'enriquecer']);
+const TAREFAS = { minerar, gateway, analisar, atualizar, rotina, manutencao, enriquecer, sites, vetores, fila: processarFila };
+const SEM_NAVEGADOR = new Set(['manutencao', 'enriquecer', 'vetores']);
 const ORIGEM = process.env.GITHUB_ACTIONS ? 'actions' : 'local';
 
 const o = lerArgs(process.argv.slice(2));
@@ -392,6 +398,7 @@ try {
     await processarMiniaturas({ limite: 200, log });
     log('> Enriquecimento (preço em reais, idioma, tipo de oferta, ofertas por checkout)');
     await enriquecerTudo({ log });
+    await vetores();
   }
 } catch (e) {
   codigo = 1; falha = e;
