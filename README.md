@@ -49,7 +49,7 @@ Dados locais: `dados/minerador.db` (SQLite).
 ## Hospedagem grátis 24h (Vercel + Supabase + GitHub Actions)
 
 ```
-GitHub Actions (robô com navegador, de 8 em 8 h e quando você clica "Minerar")
+GitHub Actions (robô com navegador, 2x por dia e quando você clica "Minerar")
         │ grava
         ▼
 Supabase (Postgres grátis) ◄── lê ── Vercel (painel online)
