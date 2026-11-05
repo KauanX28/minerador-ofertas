@@ -412,9 +412,17 @@ async function loteIA(_, o = {}) {
   log(`  IA: ${n} criativos analisados agora (os demais já estavam no cache)`);
 }
 
+// Renovar mídia: recoleta os anúncios de um anunciante (os links de vídeo do fbcdn expiram em alguns dias).
+async function renovar(ctx, o) {
+  const id = String(o.pagina || '');
+  if (!/^\d{5,}$/.test(id)) throw new Error('Informe --pagina <id do anunciante>');
+  log(`> Renovando vídeos e imagens do anunciante ${id} (${o.pais || 'BR'})`);
+  await aprofundarPaginas(ctx, { ...o, pais: o.pais || 'BR' }, [id]);
+}
+
 async function validar(_, o) { const d = o.url || o._[1]; if (!d) throw new Error('Informe --url'); const v = await validarDominio(d); log(JSON.stringify(v, null, 1).slice(0, 3000)); }
 
-const TAREFAS = { minerar, gateway, analisar, atualizar, rotina, manutencao, enriquecer, sites, vetores, validar, ia: loteIA, fila: processarFila };
+const TAREFAS = { minerar, gateway, analisar, atualizar, rotina, manutencao, enriquecer, sites, vetores, validar, renovar, ia: loteIA, fila: processarFila };
 const SEM_NAVEGADOR = new Set(['manutencao', 'enriquecer', 'vetores', 'validar', 'ia']);
 const ORIGEM = process.env.GITHUB_ACTIONS ? 'actions' : 'local';
 

@@ -93,6 +93,10 @@ function montarArgs(b) {
     a.push('--url', String(b.url)); desc = `Raio-X de ${b.url}`;
   } else if (b.tipo === 'atualizar') {
     desc = 'Atualizando contagens';
+  } else if (b.tipo === 'renovar') {
+    // Os links de vídeo do Facebook expiram: recoleta o anunciante para trazer links novos.
+    if (!/^\d{5,}$/.test(String(b.pagina || ''))) return null;
+    a.push('--pagina', String(b.pagina)); desc = 'Renovando vídeos e imagens de um anunciante';
   } else return null;
   return { args: a, desc };
 }

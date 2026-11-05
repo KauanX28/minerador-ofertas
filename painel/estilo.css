@@ -437,3 +437,5 @@ label.botao { width: fit-content; font-size: 13px; }
 .previa iframe { width: 100%; height: 760px; border: 0; display: block; }
 
 @media print { #menu, #topo, .barra-comparar, .cab button { display: none !important; } main { padding: 0; } body { background: #fff; } }
+
+.expirou { position: relative; } .expirou button { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); white-space: nowrap; }

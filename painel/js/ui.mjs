@@ -1,6 +1,6 @@
 // Componentes visuais reutilizados em todas as telas.
 import { useState } from 'preact/hooks';
-import { html, fmt, compacto, brl, diasDesde, STATUS, bib, copiar, favoritar, loja, definir, nomeGateway, TIPOS_OFERTA, dataCurta } from './base.mjs';
+import { html, fmt, compacto, brl, diasDesde, STATUS, bib, copiar, favoritar, loja, definir, nomeGateway, TIPOS_OFERTA, dataCurta, rodarTarefa } from './base.mjs';
 
 const ICONES = {
   inicio: 'M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
@@ -141,9 +141,11 @@ export function CartaoOferta({ p, selecionado, onSelecionar }) {
 
 export function CartaoAnuncio({ a, onModelar }) {
   const dias = diasDesde(a.inicio);
+  const [expirou, setExpirou] = useState(false);
   return html`<div class="ad">
     <div class="ad-cab"><b title=${a.page_name}>${a.page_name || ''}</b>${a.ativo === 0 ? html`<span class="tag">inativo</span>` : null}</div>
-    <div class="ad-midia">${a.video ? html`<video src=${a.video} poster=${a.thumb || ''} controls preload="none"></video>` : a.thumb ? html`<img src=${a.thumb} loading="lazy" alt="" />` : html`<div style="height:80px"></div>`}
+    <div class="ad-midia">${a.video && !expirou ? html`<video src=${a.video} poster=${a.thumb || ''} controls preload="metadata" onError=${() => setExpirou(true)}></video>`
+      : a.video && expirou ? html`<div class="expirou">${a.thumb ? html`<img src=${a.thumb} loading="lazy" alt="" />` : null}<button class="bt-p" onClick=${() => rodarTarefa({ tipo: 'renovar', pagina: a.page_id, pais: loja.pais })}>O link do vídeo expirou: renovar</button></div>` : a.thumb ? html`<img src=${a.thumb} loading="lazy" alt="" />` : html`<div style="height:80px"></div>`}
       ${a.formato ? html`<span class="selo">${a.formato}</span>` : null}</div>
     <div class="ad-met"><div><b>${dias ?? '—'}</b><span>dias</span></div><div><b>${a.dup || 1}x</b><span>variações</span></div><div><b title=${a.cta || ''}>${(a.cta || '—').slice(0, 12)}</b><span>CTA</span></div></div>
     <div class="ad-info">${a.titulo ? html`<b>${a.titulo}</b>` : null}<div class="txt">${a.texto}</div>
