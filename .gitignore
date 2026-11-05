@@ -2,3 +2,7 @@ node_modules/
 dados/
 .env
 .vercel/
+.vercel-cli/
+
+.vercel
+.env*
