@@ -24,8 +24,8 @@ function Gravar($nome, $valor) {
 
 Write-Host ''
 Write-Host '1) Chave de servico do Supabase' -ForegroundColor Cyan
-Write-Host '   Supabase > projeto minerador-ofertas > Project Settings > API Keys > aba "Legacy API keys" > service_role > Reveal'
-Write-Host '   (ou, na aba nova, crie uma "Secret key" sb_secret_...). Nunca compartilhe essa chave.'
+Write-Host '   Supabase > projeto minerador-ofertas > Project Settings > API Keys > aba "Legacy API keys" > service_role > Reveal (formato antigo)'
+Write-Host '   ou, na aba "API Keys", copie a "Secret key" (sb_secret_...). NUNCA use a publishable.'
 Gravar 'SUPABASE_SERVICE_ROLE_KEY' (LerOculto 'Cole a chave de servico')
 
 Write-Host ''

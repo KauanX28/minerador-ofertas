@@ -13,6 +13,8 @@ const URL_SB = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
 const CHAVE_SERVICO = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const BUCKET = 'miniaturas';
 const temStorage = () => !!(URL_SB && CHAVE_SERVICO);
+// Chave nova (sb_secret_...) vai só no cabeçalho apikey; a antiga (service_role, JWT) também como Bearer.
+const cabecalhos = (extra = {}) => ({ apikey: CHAVE_SERVICO, ...(CHAVE_SERVICO.startsWith('sb_') ? {} : { Authorization: `Bearer ${CHAVE_SERVICO}` }), ...extra });
 const hoje = () => new Date().toISOString().slice(0, 10);
 
 async function contarUso(chave, valor) {
@@ -57,7 +59,7 @@ async function gravar(nome, buf) {
   }
   const r = await fetch(`${URL_SB}/storage/v1/object/${BUCKET}/ads/${nome}.webp`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${CHAVE_SERVICO}`, apikey: CHAVE_SERVICO, 'Content-Type': 'image/webp', 'x-upsert': 'true', 'Cache-Control': '31536000' },
+    headers: cabecalhos({ 'Content-Type': 'image/webp', 'x-upsert': 'true', 'Cache-Control': '31536000' }),
     body: buf,
   });
   return r.ok;
@@ -95,7 +97,7 @@ export async function limparMiniaturas({ log = () => {} } = {}) {
   if (!velhos.length) return 0;
   if (temStorage()) {
     const r = await fetch(`${URL_SB}/storage/v1/object/${BUCKET}`, {
-      method: 'DELETE', headers: { Authorization: `Bearer ${CHAVE_SERVICO}`, apikey: CHAVE_SERVICO, 'Content-Type': 'application/json' },
+      method: 'DELETE', headers: cabecalhos({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ prefixes: velhos.map((v) => v.thumb_arquivo) }),
     });
     if (!r.ok) { log(`  falha ao apagar miniaturas: ${r.status}`); return 0; }
