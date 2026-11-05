@@ -179,7 +179,7 @@ export async function montarOfertas({ log = () => {} } = {}) {
 }
 
 // Tudo o que roda sem navegador, na ordem certa.
-export async function enriquecerTudo({ log = () => {}, limiteMarcas = 120, temTempo } = {}) {
+export async function enriquecerTudo({ log = () => {}, limiteMarcas = 250, temTempo } = {}) {
   await atualizarPrecos();
   if (limiteMarcas) { const { verificarMarcas } = await import('./marcas.js'); await verificarMarcas({ limite: limiteMarcas, log, temTempo }).catch((e) => log(`  marcas: ${e.message}`)); }
   const n = await marcarAnuncios();

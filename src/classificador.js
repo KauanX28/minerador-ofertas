@@ -109,7 +109,9 @@ export function classificar({ nome = '', categorias = '', curtidas = 0, anuncios
   const porque = { low: [], app: [], fisico: [], lancamento: [], local: [], marca: [], conversa: [] };
   const soma = (t, n, m) => { pts[t] += n; if (m && porque[t].length < 3) porque[t].push(m); };
 
-  const comGateway = anuncios.some((a) => a.gateway) || (analise?.checkouts || []).length > 0;
+  const PAGAMENTO_LOJA = /mercado ?pago|mercadopago|pagseguro|paypal|picpay|pagar\.me|cielo|getnet|shopify/i;
+  const ehInfo = (g) => g && !PAGAMENTO_LOJA.test(String(g));
+  const comGateway = anuncios.some((a) => ehInfo(a.gateway)) || (analise?.checkouts || []).some((c) => ehInfo(c.gateway));
   if (comGateway) soma('low', 6, 'checkout de gateway de infoproduto');
   // Anúncios que só levam para conversa (WhatsApp, Messenger, Direct) ou para o perfil: venda feita no chat, sem página nem checkout.
   const RE_CONVERSA = /(wa\.me|whatsapp\.com|api\.whatsapp|m\.me\/|messenger\.com|instagram\.com|ig\.me|facebook\.com\/(?!ads))/;
@@ -146,6 +148,7 @@ export function classificar({ nome = '', categorias = '', curtidas = 0, anuncios
   if (hosts.some((h) => /\.(gov|edu)(\.[a-z]{2})?$/.test(h)) || /\b(universidade|faculdade|seguradora)\b/.test(nomeL)) soma('marca', 4, 'instituição/marca');
 
   if (pts.marca < 6) pts.marca = 0; // marca grande exige sinal forte: site muito acessado, Wikidata ou 1 mi+ de curtidas
+  if (pts.marca >= 7 && ((marca?.tranco && marca.tranco <= 150000) || marca?.wikidata)) return { tipo: 'marca', motivo: porque.marca.join(' · '), bloqueado: false };
   const [melhor, valor] = Object.entries(pts).sort((a, b) => b[1] - a[1])[0];
   if (valor < 3) return { tipo: 'indefinido', motivo: 'poucos sinais', bloqueado: false };
   if (melhor === 'low') {
