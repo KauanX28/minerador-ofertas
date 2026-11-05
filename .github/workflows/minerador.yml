@@ -1,0 +1,35 @@
+# Robô do Minerador rodando de graça no GitHub Actions.
+# - De 8 em 8 horas: rotina (pedidos da fila, recontagem das páginas, rodízio de nichos/países/gateways).
+# - Sob demanda: o botão "Minerar agora" do painel na Vercel aciona este workflow com tarefa=fila.
+name: minerador
+
+on:
+  schedule:
+    - cron: '17 1,9,17 * * *'   # 22h17, 6h17 e 14h17 (horário de Brasília)
+  workflow_dispatch:
+    inputs:
+      tarefa:
+        description: 'rotina (completa) ou fila (só os pedidos do painel)'
+        default: 'rotina'
+
+concurrency:
+  group: minerador
+  cancel-in-progress: false
+
+jobs:
+  rodar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Instalar navegador
+        run: npx playwright install --with-deps chromium
+      - name: Rodar tarefa
+        run: node --no-warnings src/tarefa.js ${{ github.event.inputs.tarefa || 'rotina' }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

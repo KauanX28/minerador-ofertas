@@ -1,0 +1,21 @@
+{
+  "name": "minerador-ofertas",
+  "version": "1.0.0",
+  "description": "Minerador local de ofertas escaladas na Biblioteca de Anúncios da Meta",
+  "scripts": {
+    "painel": "node --no-warnings src/server.js",
+    "minerar": "node --no-warnings src/tarefa.js minerar",
+    "gateway": "node --no-warnings src/tarefa.js gateway",
+    "analisar": "node --no-warnings src/tarefa.js analisar",
+    "atualizar": "node --no-warnings src/tarefa.js atualizar"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "marked": "^18.1.3",
+    "playwright": "^1.64.1",
+    "postgres": "^4.0.0"
+  }
+}

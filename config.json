@@ -1,0 +1,32 @@
+{
+  "pais": "BR",
+  "maxAnunciosPorPalavra": 150,
+  "paginasParaAprofundar": 25,
+  "sitesParaAnalisar": 8,
+  "nichos": {
+    "Emagrecimento": ["emagrecer", "secar barriga", "perder peso", "chá para emagrecer", "jejum intermitente"],
+    "Saúde e dores": ["dor nas costas", "dor no joelho", "pressão alta", "diabetes", "ansiedade", "insônia"],
+    "Fitness em casa": ["treino em casa", "desafio 21 dias", "exercícios em casa", "pilates em casa", "caminhada"],
+    "Relacionamento": ["reconquistar", "relacionamento", "conquistar", "casamento", "amor próprio"],
+    "Renda extra": ["renda extra", "trabalhar em casa", "ganhar dinheiro", "revenda", "fazer e vender"],
+    "Culinária e receitas": ["receitas", "doces para vender", "marmitas", "confeitaria", "receitas fit"],
+    "Educação infantil": ["atividades para crianças", "alfabetização", "atividades pedagógicas", "autismo", "TDAH"],
+    "Cristão e religioso": ["atividades bíblicas", "devocional", "oração", "estudo bíblico", "bíblia"],
+    "Beleza e autocuidado": ["skincare", "cabelo crescer", "unhas", "maquiagem", "rugas"],
+    "Maternidade e bebês": ["bebê dormir", "introdução alimentar", "gestante", "amamentação", "maternidade"],
+    "Pets": ["adestramento", "cachorro", "gato", "pet"],
+    "Concursos e estudos": ["concurso", "ENEM", "mapas mentais", "resumos", "vestibular"],
+    "Idiomas": ["inglês", "espanhol", "fluência", "aprender inglês"],
+    "Espiritualidade e signos": ["signos", "tarô", "anjo da guarda", "manifestação", "lei da atração"],
+    "Finanças pessoais": ["sair das dívidas", "planilha financeira", "investir", "organizar finanças"],
+    "Artesanato e costura": ["crochê", "costura", "moldes", "amigurumi", "bordado"],
+    "Packs e designers": ["pack de artes", "templates canva", "presets", "pack editável", "mockups"],
+    "Low ticket (genérico)": ["por apenas R$", "acesso imediato", "garantia de 7 dias", "baixe agora", "pacote com"]
+  },
+  "rotina": {
+    "paises": ["BR"],
+    "gateways": ["hotmart", "kiwify", "cakto", "kirvano", "perfectpay", "ticto", "eduzz", "monetizze"],
+    "paginasParaAtualizar": 80,
+    "maxPorGateway": 200
+  }
+}
