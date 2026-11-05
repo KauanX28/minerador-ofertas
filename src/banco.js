@@ -53,13 +53,20 @@ if (usaPostgres) {
     return q.replace(/GROUP_CONCAT\(DISTINCT ([\w.]+)\)/gi, "string_agg(DISTINCT $1, ',')").replace(/\?/g, () => '$' + ++i);
   };
   const exec = (cli, q, p) => cli.unsafe(traduzir(q), p.map((v) => (v === undefined ? null : v)));
-  const fazer = (cli) => ({
-    all: (q, p = []) => exec(cli, q, p).then((r) => [...r]),
-    get: (q, p = []) => exec(cli, q, p).then((r) => r[0]),
-    run: (q, p = []) => exec(cli, q, p).then(() => undefined),
-  });
+  // Uma consulta por vez: com várias em paralelo a biblioteca faz "pipelining" na mesma conexão,
+  // e o pooler do Supabase (Supavisor, modo transação) deixa a resposta pendurada para sempre.
+  let fila = Promise.resolve();
+  const emFila = (fn) => { const r = fila.then(fn, fn); fila = r.catch(() => {}); return r; };
+  const fazer = (cli, serial) => {
+    const rodar = serial ? (q, p) => emFila(() => exec(cli, q, p)) : exec.bind(null, cli);
+    return {
+      all: (q, p = []) => rodar(q, p).then((r) => [...r]),
+      get: (q, p = []) => rodar(q, p).then((r) => r[0]),
+      run: (q, p = []) => rodar(q, p).then(() => undefined),
+    };
+  };
   impl = {
-    ...fazer(sql),
+    ...fazer(sql, true),
     tx: (fn) => sql.begin((t) => fn(fazer(t))),
     iniciar: async () => {
       // Se o esquema já existe, não roda DDL: ALTER/CREATE pedem bloqueio exclusivo e ficariam esperando
