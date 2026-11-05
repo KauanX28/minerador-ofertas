@@ -387,3 +387,11 @@ select.grande { width: 100%; padding: 10px; font-size: 15px; }
 
 .com-sim { position: relative; display: flex; } .com-sim .ad { flex: 1; }
 .sim { position: absolute; right: 8px; top: 42px; z-index: 2; background: var(--pri); color: #fff; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; }
+
+/* validação (fase 4) */
+.validacao { display: flex; flex-direction: column; gap: 14px; }
+.veredito .pb-corpo { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 4px 16px; }
+.check .sim, .check .nao { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; margin-right: 8px; }
+.check .sim { background: var(--ok-s); color: var(--ok); } .check .nao { background: var(--aviso-s); color: var(--aviso); }
+.check { display: flex; align-items: center; padding: 3px 0; font-size: 13px; }
+a.chip { color: var(--txt2); } a.chip:hover { text-decoration: none; border-color: var(--pri); }

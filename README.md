@@ -80,6 +80,17 @@ powershell -ExecutionPolicy Bypass -File .\configurar-nuvem.ps1     # DATABASE_U
 powershell -ExecutionPolicy Bypass -File .\configurar-segredos.ps1  # chave de serviço do Supabase e Telegram (opcional)
 ```
 
+### Chave grátis do Google (opcional): tráfego real e velocidade
+
+A validação de sites usa o Chrome UX Report e o PageSpeed Insights, que pedem uma chave de API grátis, sem cartão:
+
+1. Em https://console.cloud.google.com, crie um projeto.
+2. Ative as APIs "Chrome UX Report API" e "PageSpeed Insights API".
+3. Em "Credenciais", crie uma "Chave de API".
+4. Salve a chave como `GOOGLE_API_KEY` em dois lugares: nos *Secrets* do GitHub (robô) e nas variáveis de ambiente da Vercel (botão "Validar de novo").
+
+Sem a chave, o resto da validação funciona normalmente: Wayback Machine, idade do domínio (RDAP), subdomínios (Cert Spotter / crt.sh) e ranking Tranco.
+
 ### Primeiro acesso (login)
 
 O painel online pede login (Supabase Auth). Para criar sua conta sem depender de e-mail de confirmação:

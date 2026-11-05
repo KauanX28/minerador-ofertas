@@ -99,11 +99,11 @@ export const salvarBusca = ({ palavra, nicho, pais, total, coletados }) => run(
   'INSERT INTO buscas (palavra, nicho, pais, total, coletados, quando) VALUES (?, ?, ?, ?, ?, ?)',
   [palavra, nicho ?? null, pais, total ?? null, coletados, agora()]);
 
-export const salvarCheckout = ({ checkout, gateway, url, produto, preco, ok }) => run(
-  `INSERT INTO checkouts (checkout, gateway, url, produto, preco, analisado, ok) VALUES (?, ?, ?, ?, ?, ?, ?)
+export const salvarCheckout = ({ checkout, gateway, url, produto, preco, ok, bumps }) => run(
+  `INSERT INTO checkouts (checkout, gateway, url, produto, preco, analisado, ok, bumps) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
    ON CONFLICT(checkout) DO UPDATE SET url=excluded.url, produto=excluded.produto, preco=excluded.preco,
-   analisado=excluded.analisado, ok=excluded.ok`,
-  [checkout, gateway, url, produto ?? null, preco ?? null, agora(), ok ? 1 : 0]);
+   analisado=excluded.analisado, ok=excluded.ok, bumps=excluded.bumps`,
+  [checkout, gateway, url, produto ?? null, preco ?? null, agora(), ok ? 1 : 0, bumps?.length ? JSON.stringify(bumps) : null]);
 
 export const salvarAnalise = (dominio, url, dados) => run(
   `INSERT INTO analises (dominio, url, dados, quando) VALUES (?, ?, ?, ?)

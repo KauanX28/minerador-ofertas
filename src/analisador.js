@@ -158,7 +158,18 @@ export async function lerCheckout(ctx, url) {
       const cand = [];
       for (const s of sels) for (const e of document.querySelectorAll(s)) { const t = e.innerText?.trim().split('\n')[0]; if (t && t.length > 3 && t.length < 140) cand.push(t); }
       const ld = [...document.querySelectorAll('script[type="application/ld+json"]')].map((x) => x.textContent).join(' ');
-      return { titulo: document.title, og, cand, ld, texto: document.body?.innerText?.slice(0, 20000) || '' };
+      // Order bumps: caixa de seleção (ou botão "adicionar") com preço no mesmo bloco.
+      const bumps = [];
+      for (const cb of document.querySelectorAll('input[type="checkbox"], [role="checkbox"], [class*="bump" i], [class*="orderbump" i], [class*="order-bump" i]')) {
+        let el = cb;
+        for (let i = 0; i < 6 && el; i++) {
+          el = el.parentElement;
+          const t = (el?.innerText || '').trim();
+          if (t.length > 700) break;
+          if (/(R\$|US\$|\$|€)\s?\d/.test(t)) { if (!/termos|pol[ií]tica|concordo|aceito|lembrar|salvar (meus )?dados|privacidade/i.test(t)) bumps.push(t); break; }
+        }
+      }
+      return { titulo: document.title, og, cand, ld, bumps: [...new Set(bumps)].slice(0, 8), texto: document.body?.innerText?.slice(0, 20000) || '' };
     }, SELETORES_PRODUTO);
     let d = await ler();
     let precos = precosDoTexto(d.texto).filter((p) => !/^(R\$|US\$|\$|€)\s?0+([.,]0+)?$/.test(p));
@@ -170,7 +181,11 @@ export async function lerCheckout(ctx, url) {
     const limpar = (t) => String(t || '').replace(/^\s*(checkout|pagamento)\s*[|\-–—:]\s*/i, '').replace(/\s*[|\-–—]\s*(hotmart|kiwify|cakto|kirvano|eduzz|ticto|perfect ?pay|hubla|braip|greenn|payt|monetizze|checkout).*$/i, '').trim();
     const produto = [...d.cand, d.og, d.titulo].map(limpar).find((t) => t && t.length > 3 && !RUINS_PRODUTO.test(t) && !nomesGw.has(t.toLowerCase())) || limpar(d.titulo) || null;
     const indisponivel = /indispon[ií]vel|n[aã]o encontrad|not found|desativad|404|expirad/i.test(d.texto.slice(0, 2000)) && precos.length === 0;
-    return { produto: produto?.slice(0, 140) || null, preco: precos[0] || null, precos, ok: !indisponivel };
+    const bumps = (d.bumps || []).map((t) => {
+      const linhas = t.split('\n').map((x) => x.trim()).filter((x) => x && !/^(sim|quero|adicionar|eu quero)/i.test(x) && !/^(R\$|US\$|\$|€)/.test(x));
+      return { titulo: (linhas[0] || '').slice(0, 120), preco: precosDoTexto(t)[0] || null };
+    }).filter((b) => b.titulo && b.preco);
+    return { produto: produto?.slice(0, 140) || null, preco: precos[0] || null, precos, ok: !indisponivel, bumps };
   } catch {
     return { produto: null, preco: null, ok: false };
   } finally {

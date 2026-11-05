@@ -2,6 +2,7 @@
 import { useState } from 'preact/hooks';
 import { html, useDados, useLoja, navegar, fmt, relativo, rodarTarefa } from '../base.mjs';
 import { Ic, Tabela, Esqueleto, Erro, Vazio, Ent, Kpi, Gws, Estrela } from '../ui.mjs';
+import { Validacao } from './validacao.mjs';
 
 export function TelaSites() {
   const l = useLoja();
@@ -28,6 +29,7 @@ export function TelaSite({ dominio }) {
   const atalhos = html`<div class="linha">${Object.entries(links || {}).map(([n, u]) => html`<a class="botao" href=${u} target="_blank" rel="noopener">${n} <${Ic} n="externo" t=${12} /></a>`)}</div>`;
   const analisar = () => rodarTarefa({ tipo: 'analisar', url: dominio, pais: l.pais });
   if (!a) return html`<div class="cab"><div><div class="migalha"><a href="/sites">Sites</a> / ${dominio}</div><h1>${dominio}</h1></div></div>
+    <div class="secao"><${Validacao} dominio=${dominio} /></div>
     <${Vazio} titulo="Este site ainda não foi analisado" texto=${`A análise abre a página como celular, identifica gateway, checkout, preço, VSL, quiz, rastreadores e cloaker, lê o sitemap.xml e conta os anúncios que levam ao site (${l.pais}).`} acao="Analisar agora" onAcao=${analisar} />
     <div class="secao"><div class="secao-cab"><h2>Ferramentas externas</h2></div>${atalhos}</div>`;
   const t = a.tecnologia || {};
@@ -38,6 +40,7 @@ export function TelaSite({ dominio }) {
     <div class="kpis"><${Kpi} rot="Anúncios para o site" val=${fmt(a.biblioteca?.total)} sub="na Biblioteca" />
       <${Kpi} rot="Páginas anunciando" val=${fmt(a.biblioteca?.paginas?.length)} sub=${(a.biblioteca?.paginas?.length || 0) > 1 ? 'várias contas: sinal de escala' : ''} />
       <${Kpi} rot="Gateway" val=${(a.gateways || []).join(', ') || '—'} /><${Kpi} rot="Preço principal" val=${a.checkouts?.[0]?.preco || a.precos?.[0] || '—'} /></div>
+    <div class="secao"><${Validacao} dominio=${a.dominio} nome=${a.checkouts?.[0]?.produto || a.titulo} /></div>
     ${a.cloaker?.suspeito ? html`<div class="aviso-erro">Possível cloaker: ${a.cloaker.motivo}. O robô de anúncios vê uma página diferente da que o cliente vê.</div>` : null}
     <div class="grade-2 secao">
       <div class="painel-box"><div class="pb-cab"><h2>Página</h2></div><div class="pb-corpo">

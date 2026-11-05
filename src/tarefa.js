@@ -19,6 +19,7 @@ import { alertar } from './alerta.js';
 import { processarMiniaturas, limparMiniaturas } from './midia.js';
 import { usoELimites } from './uso.js';
 import { enriquecerTudo } from './enriquecer.js';
+import { validarDominio } from './validacao.js';
 import { idiomaDoPais } from './classificador.js';
 
 // Palavras do nicho no idioma do país (config antiga com lista simples = português).
@@ -139,6 +140,8 @@ async function enriquecerDominios(ctx, o, { limite = 6, minAnuncios = 8 } = {}) 
   for (const d of vez) {
     if (!temTempo(3)) { log('  (tempo da rodada esgotado, o resto fica para a próxima)'); break; }
     await analisarDominio(ctx, o, d, { aprofundar: 0, max: 30 }).catch((e) => log(`  ${d}: ${e.message}`));
+    await validarDominio(d, { pagespeedTambem: false }).then((v) => log(`  validação: ${v.crux?.trafego ? 'tráfego detectável' : 'sem tráfego no CrUX'}, ${v.wayback?.versoes ?? 0} versões no Wayback, domínio com ${v.rdap?.idadeDias ?? '?'} dias`))
+      .catch((e) => log(`  validação de ${d}: ${e.message}`));
     await pausa();
   }
 }
@@ -377,8 +380,10 @@ async function vetores(_, o = {}) {
 }
 async function sites(ctx, o) { await enriquecerDominios(ctx, o, { limite: Number(o.limite || 10), minAnuncios: Number(o.min || 8) }); }
 
-const TAREFAS = { minerar, gateway, analisar, atualizar, rotina, manutencao, enriquecer, sites, vetores, fila: processarFila };
-const SEM_NAVEGADOR = new Set(['manutencao', 'enriquecer', 'vetores']);
+async function validar(_, o) { const d = o.url || o._[1]; if (!d) throw new Error('Informe --url'); const v = await validarDominio(d); log(JSON.stringify(v, null, 1).slice(0, 3000)); }
+
+const TAREFAS = { minerar, gateway, analisar, atualizar, rotina, manutencao, enriquecer, sites, vetores, validar, fila: processarFila };
+const SEM_NAVEGADOR = new Set(['manutencao', 'enriquecer', 'vetores', 'validar']);
 const ORIGEM = process.env.GITHUB_ACTIONS ? 'actions' : 'local';
 
 const o = lerArgs(process.argv.slice(2));

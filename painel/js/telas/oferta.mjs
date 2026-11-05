@@ -2,8 +2,9 @@
 import { useState } from 'preact/hooks';
 import { html, useDados, navegar, nomePais, loja, fmt, relativo, bib, copiar, rodarTarefa, TIPOS_OFERTA, diasDesde, dataCurta } from '../base.mjs';
 import { Ic, Status, Gws, Preco, Score, Grafico, Ent, Estrela, Kpi, Esqueleto, Erro, Vazio, Abas, CartaoAnuncio, ModalModelar, Tabela, TipoTag } from '../ui.mjs';
+import { Validacao } from './validacao.mjs';
 
-const ABAS = [['geral', 'Visão geral'], ['criativos', 'Criativos'], ['funil', 'Funil'], ['pagina', 'Página'], ['checkout', 'Checkout'], ['historico', 'Histórico'], ['modelar', 'Modelar']];
+const ABAS = [['geral', 'Visão geral'], ['criativos', 'Criativos'], ['funil', 'Funil'], ['pagina', 'Página e validação'], ['checkout', 'Checkout'], ['historico', 'Histórico'], ['modelar', 'Modelar']];
 
 export function TelaOferta({ id, aba }) {
   const r = useDados('/api/pagina/' + encodeURIComponent(id), [id]);
@@ -73,9 +74,12 @@ function Criativos({ anuncios, onModelar }) {
 
 function Funil({ p, analise, checkouts }) {
   const t = analise?.tecnologia || {};
+  const bumps = checkouts.flatMap((c) => { try { return JSON.parse(c.bumps || '[]'); } catch { return []; } });
   const etapas = [['Anúncio', `${fmt(p.ativos)} anúncios ativos · ${p.formato === 'VIDEO' ? 'maioria em vídeo' : p.formato === 'IMAGE' ? 'maioria em imagem' : 'formatos variados'}`],
     t.quiz?.length ? ['Quiz', t.quiz.join(', ')] : null, ['Página', analise ? (analise.titulo || analise.dominio) : p.dominios?.[0] || 'direto para o checkout'],
-    t.vsl?.length ? ['VSL', t.vsl.join(', ')] : null, ['Checkout', checkouts[0] ? `${checkouts[0].produto || checkouts[0].checkout} · ${checkouts[0].preco || ''}` : (p.gateways || []).join(', ') || 'não identificado']].filter(Boolean);
+    t.vsl?.length ? ['VSL', t.vsl.join(', ')] : null, ['Checkout', checkouts[0] ? `${checkouts[0].produto || checkouts[0].checkout} · ${checkouts[0].preco || ''}` : (p.gateways || []).join(', ') || 'não identificado'],
+    bumps.length ? ['Order bumps', bumps.map((b) => `${b.titulo} (${b.preco})`).join(' · ')] : null,
+    ['Upsell / downsell', 'só aparece depois da compra: confira comprando o produto ou nas reclamações']].filter(Boolean);
   return html`<div class="funil">${etapas.map(([n, d], i) => html`<div class="funil-etapa"><span class="num-passo">${i + 1}</span><div><b>${n}</b><div class="mut peq">${d}</div></div></div>${i < etapas.length - 1 ? html`<${Ic} n="seta" />` : null}`)}</div>
     ${!analise ? html`<${SemAnalise} p=${p} />` : html`<div class="grade-2 secao">
       <div class="painel-box"><div class="pb-cab"><h2>Tecnologia</h2></div><div class="pb-corpo"><dl class="lista-def">
@@ -91,19 +95,18 @@ const SemAnalise = ({ p }) => html`<div class="painel-box secao"><div class="pb-
   ${p.dominios?.[0] ? html`<button class="pri" onClick=${() => rodarTarefa({ tipo: 'analisar', url: p.dominios[0], pais: loja.pais })}>Analisar ${p.dominios[0].split('/')[0]}</button>` : html`<span class="mut">Sem site identificado nos anúncios.</span>`}</div></div>`;
 
 function Pagina({ p, analise }) {
-  if (!analise) return html`<${SemAnalise} p=${p} />`;
+  const dom = analise?.dominio || p.dominios?.[0]?.split('/')[0];
+  const validacao = dom ? html`<div class="secao"><${Validacao} dominio=${dom} nome=${p.produto || p.nome} /></div>` : null;
+  if (!analise) return html`<${SemAnalise} p=${p} />${validacao}`;
   return html`<div class="grade-2">
     <div class="painel-box"><div class="pb-cab"><h2>${analise.dominio}</h2>${analise.urlFinal ? html`<a class="botao" href=${analise.urlFinal} target="_blank" rel="noopener">Abrir <${Ic} n="externo" /></a>` : null}</div><div class="pb-corpo">
       ${analise.imagem ? html`<img src=${analise.imagem} alt="" class="capa" />` : null}<b>${analise.titulo || ''}</b><div class="mut peq">${analise.descricao || ''}</div>
       ${(analise.manchetes || []).length ? html`<div class="peq secao">${analise.manchetes.map((m) => html`<div>· ${m}</div>`)}</div>` : null}
       ${(analise.precos || []).length ? html`<div class="peq secao"><span class="mut">Preços na página:</span> ${analise.precos.slice(0, 6).join(' · ')}</div>` : null}</div></div>
-    <div class="painel-box"><div class="pb-cab"><h2>Validar fora da Meta</h2></div><div class="pb-corpo"><p class="mut peq">Ferramentas grátis para confirmar tráfego e histórico do site:</p>
-      <div class="linha">${[['Wayback Machine', `https://web.archive.org/web/*/${analise.dominio}`], ['Google Trends', `https://trends.google.com/trends/explore?geo=${loja.pais}&q=${encodeURIComponent(p.produto || p.nome)}`],
-        ['Reclame Aqui', `https://www.reclameaqui.com.br/busca/?q=${encodeURIComponent(p.produto || p.nome)}`], ['Google Ads Transparency', `https://adstransparency.google.com/?region=${loja.pais}&domain=${analise.dominio}`],
-        ['TikTok Ads', `https://library.tiktok.com/ads?region=all&adv_name=${encodeURIComponent(p.nome)}`], ['PageSpeed', `https://pagespeed.web.dev/analysis?url=https://${analise.dominio}`]]
-        .map(([n, u]) => html`<a class="botao" href=${u} target="_blank" rel="noopener">${n} <${Ic} n="externo" t=${12} /></a>`)}</div>
-      <p class="peq mut">Na Fase 4 estes dados passam a aparecer aqui dentro, automaticamente.</p>
-      <a class="peq" href=${'/site/' + encodeURIComponent(analise.dominio)}>Ver análise completa do site</a></div></div></div>`;
+    <div class="painel-box"><div class="pb-cab"><h2>Estrutura da página</h2></div><div class="pb-corpo"><dl class="lista-def">
+      <dt>VSL</dt><dd>${(analise.tecnologia?.vsl || []).join(', ') || '—'}</dd><dt>Quiz</dt><dd>${(analise.tecnologia?.quiz || []).join(', ') || '—'}</dd>
+      <dt>Construtor</dt><dd>${(analise.tecnologia?.construtor || []).join(', ') || '—'}</dd><dt>Palavras</dt><dd>${fmt(analise.palavras)}</dd></dl>
+      <a class="peq" href=${'/site/' + encodeURIComponent(analise.dominio)}>Ver análise completa do site</a></div></div></div>${validacao}`;
 }
 
 function Checkouts({ checkouts, p }) {

@@ -138,4 +138,14 @@ export const MIGRACOES = [
       await ddl('CREATE INDEX IF NOT EXISTS ix_anuncios_embedding ON anuncios USING hnsw (embedding vector_cosine_ops)');
     },
   },
+  {
+    versao: 6,
+    nome: 'fase 4: validação do site (tráfego, Wayback, idade, subdomínios, Tranco) e order bumps',
+    up: async (ctx) => {
+      const { ddl, colunas } = ctx;
+      await ddl('CREATE TABLE IF NOT EXISTS validacoes (dominio TEXT PRIMARY KEY, dados TEXT, quando BIGINT)');
+      if (!(await colunas('checkouts')).includes('bumps')) await ddl('ALTER TABLE checkouts ADD COLUMN bumps TEXT');
+      await rls(ctx, ['validacoes']);
+    },
+  },
 ];

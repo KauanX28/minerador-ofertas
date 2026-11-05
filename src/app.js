@@ -180,6 +180,12 @@ async function atender(req, res) {
       if (!(await colunaVetorExiste())) return json(res, { erro: 'Busca por significado ainda não ativada no banco.' }, 400);
       return json(res, await buscarPorSignificado(b.vetor, String(b.pais || pais).toUpperCase(), Math.min(Number(b.limite || 48), 120)));
     }
+    if (rota === '/api/validacao') {
+      // Validação do site com APIs públicas grátis. GET lê a última; POST roda de novo (leva de 5 a 40 s).
+      const { validarDominio, lerValidacao } = await import('./validacao.js');
+      if (req.method === 'POST') { const b = await corpo(req); if (!b.dominio) return json(res, { erro: 'informe o domínio' }, 400); return json(res, await validarDominio(b.dominio)); }
+      return json(res, (q.dominio && (await lerValidacao(q.dominio))) || null);
+    }
     if (rota === '/api/prefs' && req.method === 'GET') {
       const r = await get("SELECT valor FROM prefs WHERE user_id = ? AND chave = 'perfil'", [uid()]);
       return json(res, r ? JSON.parse(r.valor) : {});
