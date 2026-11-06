@@ -48,7 +48,7 @@ const local = { rodando: false, tipo: null, descricao: '', log: [], inicio: null
 function rodarLocal(tipo, args, descricao, { enfileirar = false } = {}) {
   if (local.rodando) {
     if (!enfileirar) return false;
-    if (local.descricao !== descricao && !local.fila.some((x) => x.descricao === descricao)) local.fila.push({ tipo, args, descricao });
+    if (local.descricao !== descricao && !local.fila.some((x) => x.descricao === descricao)) local.fila.push({ tipo, args, descricao, foco: enfileirar });
     return true;
   }
   Object.assign(local, { rodando: true, tipo, descricao, log: [], inicio: Date.now(), fim: null, codigo: null });
@@ -84,9 +84,12 @@ async function enfileirar(b, origem = 'painel') {
   const m = montarArgs(b);
   if (!m) return { erro: 'tipo inválido' };
   if (!NUVEM) {
+    if (origem === 'foco') local.fila = local.fila.filter((x) => x.descricao === m.desc || !x.foco);
     const naFila = local.rodando && local.descricao !== m.desc;
     return { iniciado: rodarLocal(b.tipo, m.args, m.desc, { enfileirar: origem === 'foco' }), tarefa: local, aviso: naFila && origem === 'foco' ? 'na fila: começa quando o robô terminar a busca atual' : undefined };
   }
+  // Pedido ao vivo novo substitui os pedidos ao vivo que ainda esperam na fila (vale o último nicho ou termo escolhido).
+  if (origem === 'foco') await run("DELETE FROM tarefas WHERE origem = 'foco' AND status = 'pendente' AND descricao <> ?", [m.desc]);
   const ja = await get("SELECT id FROM tarefas WHERE descricao = ? AND status IN ('pendente', 'rodando')", [m.desc]);
   if (!ja) await run('INSERT INTO tarefas (tipo, args, descricao, user_id, origem, criado) VALUES (?, ?, ?, ?, ?, ?)', [b.tipo, JSON.stringify(m.args), m.desc, uid(), origem, agora()]);
   return { iniciado: true, aviso: await acionarGithub() };
@@ -487,6 +490,10 @@ Dados: ${JSON.stringify(dados).slice(0, 6000)}`;
       const tarefa = NUVEM ? await get('SELECT id, status, log, inicio, fim, criado FROM tarefas WHERE descricao = ? ORDER BY id DESC LIMIT 1', [desc])
         : local.descricao === desc ? { status: local.rodando ? 'rodando' : 'concluido', log: local.log.join('\n'), inicio: local.inicio / 1000, fim: local.fim ? local.fim / 1000 : null }
         : local.fila.some((x) => x.descricao === desc) ? { status: 'pendente', log: `Na fila: o robô está terminando "${local.descricao}"` } : null;
+      if (NUVEM && tarefa?.status === 'pendente') {
+        const ativa = await get("SELECT descricao FROM tarefas WHERE status = 'rodando' ORDER BY id DESC LIMIT 1");
+        if (ativa) tarefa.log = `Na fila: o robô está terminando "${ativa.descricao.replace(/^Minerando:? /, '')}"`;
+      }
       const ultima = (termo ? await get('SELECT MAX(quando) q FROM buscas WHERE LOWER(palavra) = LOWER(?) AND pais = ?', [termo, paisF])
         : await get('SELECT MAX(quando) q FROM buscas WHERE nicho = ? AND pais = ?', [nicho, paisF]))?.q || null;
       const estado = { nicho, termo, pais: paisF, ultimaBusca: ultima, status: tarefa?.status || null, rodando: ['pendente', 'rodando'].includes(tarefa?.status),
@@ -495,8 +502,10 @@ Dados: ${JSON.stringify(dados).slice(0, 6000)}`;
       if (estado.rodando) return json(res, { ...estado, aviso: 'o robô já está buscando este nicho' });
       if (ultima && agora() - ultima < (b.forcar ? 15 * 60 : 6 * 3600)) return json(res, { ...estado, recente: true });
       if (nicho && !(await lerConfig()).nichos?.[nicho]) return json(res, { erro: 'nicho não existe nas Configurações' }, 400);
-      const r = await enfileirar(termo ? { tipo: 'minerar', palavras: termo, nicho: 'Avulso', pais: paisF, top: 12, sites: 3 }
-        : { tipo: 'minerar', nicho, pais: paisF, top: 12, sites: 3 }, 'foco');
+      // Busca ao vivo é leve (sem raio-X de sites, 8 anunciantes contados): os anúncios aparecem em 1 a 2 minutos.
+      // O raio-X dos sites fica para as rodadas automáticas do robô.
+      const r = await enfileirar(termo ? { tipo: 'minerar', palavras: termo, nicho: 'Avulso', pais: paisF, top: 8, sites: 0 }
+        : { tipo: 'minerar', nicho, pais: paisF, top: 8, sites: 0 }, 'foco');
       return json(res, { ...estado, ...r, rodando: !!r.iniciado, status: 'pendente' });
     }
     if (rota === '/api/tarefa') return json(res, await estadoTarefa());
