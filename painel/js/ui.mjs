@@ -1,5 +1,5 @@
 // Componentes visuais reutilizados em todas as telas.
-import { useState } from 'preact/hooks';
+import { useState, useEffect, useRef } from 'preact/hooks';
 import { html, fmt, compacto, brl, diasDesde, STATUS, bib, copiar, favoritar, loja, definir, nomeGateway, TIPOS_OFERTA, dataCurta, rodarTarefa, post, aviso } from './base.mjs';
 
 const ICONES = {
@@ -216,7 +216,23 @@ export function CartaoAnuncio({ a, onModelar }) {
     </div></div>`;
 }
 
+// Folha: painel que desliza (da direita no desktop, de baixo no celular). Fecha com Esc ou tocando fora.
+export function Folha({ titulo, onFechar, children, rodape }) {
+  const ref = useRef();
+  useEffect(() => {
+    const esc = (e) => { if (e.key === 'Escape') onFechar(); };
+    document.addEventListener('keydown', esc);
+    const antes = document.activeElement; ref.current?.querySelector('button, a, input, select')?.focus();
+    return () => { document.removeEventListener('keydown', esc); antes?.focus?.(); };
+  }, []);
+  return html`<div class="fundo on" onClick=${onFechar}></div>
+    <div class="folha" role="dialog" aria-modal="true" aria-label=${titulo} ref=${ref}>
+      <div class="folha-topo"><b>${titulo}</b><button class="bt-ic" onClick=${onFechar} aria-label="Fechar"><${Ic} n="fechar" /></button></div>
+      <div class="folha-corpo">${children}</div>${rodape ? html`<div class="folha-rod">${rodape}</div>` : null}</div>`;
+}
+
 export function Modal({ titulo, onFechar, children, largo }) {
+  useEffect(() => { const esc = (e) => { if (e.key === 'Escape') onFechar(); }; document.addEventListener('keydown', esc); return () => document.removeEventListener('keydown', esc); }, []);
   return html`<div class="fundo on" onClick=${onFechar}></div>
     <div class=${'modal' + (largo ? ' largo' : '')} role="dialog" aria-modal="true" aria-label=${titulo}>
       <div class="modal-topo"><b>${titulo}</b><button class="bt-ic" onClick=${onFechar} aria-label="Fechar"><${Ic} n="fechar" /></button></div>

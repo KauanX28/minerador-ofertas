@@ -156,6 +156,10 @@ select.pais { height: 36px; max-width: 200px; font-weight: 500; }
 .conta-menu a:hover, .conta-menu button:hover { background: var(--sup-2); text-decoration: none; }
 .conta-menu .ic { color: var(--suave); }
 .conta-menu hr { border: 0; border-top: 1px solid var(--linha); margin: var(--e-1) 0; }
+.conta-menu.em-folha { position: static; width: auto; border: 0; box-shadow: none; padding: 0; background: transparent; }
+.conta-menu.em-folha a, .conta-menu.em-folha button { padding: 11px 10px; font-size: var(--t-3); }
+.md.md-folha { border: 0; padding: 0; background: transparent; max-width: none; font-size: var(--t-2); }
+.md.md-folha h2 { margin-top: 0; font-size: var(--t-4); border-bottom: 0; }
 
 main { padding: var(--e-5) var(--e-5) var(--e-7); max-width: 1440px; width: 100%; }
 
