@@ -28,7 +28,23 @@ export function termosBusca(t) {
   const ws = semAcentoBusca(t).split(/[^a-z0-9$]+/).filter((w) => w.length >= 2 && !PARADA_BUSCA.has(w)).map((w) => (w.length > 4 && w.endsWith('s') ? w.slice(0, -1) : w));
   return ws.length ? ws : semAcentoBusca(t).trim() ? [semAcentoBusca(t).trim()] : [];
 }
-function filtrarRanking(lista, q) {
+// Comparação sem acento no banco (Postgres); no modo local (SQLite) só ignora maiúsculas.
+const semAcentoSql = (c) => (usaPostgres ? `translate(LOWER(${c}), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc')` : `LOWER(${c})`);
+function filtroTermos(texto) {
+  const f = [], p = [];
+  for (const w of termosBusca(texto)) {
+    f.push(`(${semAcentoSql('texto')} LIKE ? OR ${semAcentoSql('titulo')} LIKE ? OR ${semAcentoSql('page_name')} LIKE ?)`);
+    p.push(`%${w}%`, `%${w}%`, `%${w}%`);
+  }
+  return { f, p };
+}
+// Anunciantes com pelo menos um anúncio ativo que tem todas as palavras buscadas (não só o nome ou o primeiro anúncio).
+async function paginasComTermos(texto, pais) {
+  const { f, p } = filtroTermos(texto);
+  if (!f.length) return null;
+  return new Set((await all(`SELECT DISTINCT page_id FROM anuncios WHERE ativo = 1 AND pais = ? AND ${f.join(' AND ')}`, [pais, ...p])).map((r) => r.page_id));
+}
+function filtrarRanking(lista, q, idsBusca = null) {
   const sim = (v) => v === '1' || v === 'true';
   const semAcento = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const termos = termosBusca(q.busca);
@@ -37,7 +53,7 @@ function filtrarRanking(lista, q) {
   let r = lista.filter((x) => (verMarcas || x.tipo !== 'marca') && (!nichos.length || nichos.some((n) => (x.nichos || []).includes(n))) && (!q.status || x.status === q.status) && (!q.funil || x.funil === q.funil) && (!q.formato || x.formato === q.formato)
     && (!sim(q.vsl) || x.temVsl) && (!sim(q.quiz) || x.temQuiz) && (!sim(q.checkout) || x.checkoutConhecido) && (!sim(q.plr) || x.plr)
     && (!sim(q.acelerando) || ['Nova acelerando', 'Escalando agora'].includes(x.status)) && (!sim(q.gringa) || x.semEquivalenteBR)
-    && (!termos.length || ((h) => termos.every((w) => h.includes(w)))(semAcento([x.nome, x.produto, x.titulo, x.texto, ...(x.dominios || [])].join(' ')))));
+    && (!termos.length || idsBusca?.has(x.page_id) || ((h) => termos.every((w) => h.includes(w)))(semAcento([x.nome, x.produto, x.titulo, x.texto, ...(x.dominios || [])].join(' ')))));
   if (q.ordem === 'oportunidade') r = r.filter(recomendavel);
   r = r.sort(q.ordem === 'oportunidade' ? (a, b) => notaRecomendacao(b) - notaRecomendacao(a) : ORDENS[q.ordem] || ORDENS.score);
   if (q.ids) { const ids = String(q.ids).split(','); r = lista.filter((x) => ids.includes(x.page_id)); }
@@ -228,11 +244,13 @@ async function atender(req, res) {
     if (rota === '/api/paises') return json(res, await paisesComDados());
     if (rota === '/api/painel') return json(res, await painelGeral(pais));
     if (rota === '/api/paginas') {
-      const tipos = q.ids ? [] : String(q.tipo ?? 'low').split(',').filter(Boolean);
+      let tipos = q.ids ? [] : String(q.tipo ?? 'low').split(',').filter(Boolean);
+      // Numa busca, anunciantes ainda sem classificação entram junto com os low ticket (muitos têm poucos sinais no começo).
+      if (q.busca && tipos.length === 1 && tipos[0] === 'low') tipos = ['low', 'indefinido'];
       const lista = (await rankingPaginas({ pais, nicho: q.nicho || '', min: Number(q.min || 0), minDias: Number(q.dias || 0), gateway: q.gateway || '',
         tipo: tipos.length === 1 ? tipos[0] : '', precoMax: q.ids ? 0 : Number(q.precoMax || 0), semPreco: q.semPreco !== '0', idioma: q.idioma || '' }))
         .filter((x) => tipos.length < 2 || tipos.includes(x.tipo));
-      return json(res, filtrarRanking(lista, q));
+      return json(res, filtrarRanking(lista, q, q.busca ? await paginasComTermos(q.busca, pais) : null));
     }
     if (rota === '/api/busca') {
       // Autocompletar da busca global: anunciantes, sites, checkouts e gateways num resultado só.
@@ -419,12 +437,7 @@ Dados: ${JSON.stringify(dados).slice(0, 6000)}`;
       const filtros = ['ativo = 1', 'pais = ?'], p = [pais];
       if (q.marcas !== '1') filtros.push("page_id NOT IN (SELECT page_id FROM paginas WHERE tipo = 'marca')");
       if (q.texto) {
-        // Sem acento no Postgres ("biblico" acha "bíblico"); no modo local, comparação simples.
-        const sa = (c) => (usaPostgres ? `translate(LOWER(${c}), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc')` : `LOWER(${c})`);
-        for (const w of termosBusca(q.texto)) {
-          filtros.push(`(${sa('texto')} LIKE ? OR ${sa('titulo')} LIKE ? OR ${sa('page_name')} LIKE ?)`);
-          p.push(`%${w}%`, `%${w}%`, `%${w}%`);
-        }
+        const { f, p: pt } = filtroTermos(q.texto); filtros.push(...f); p.push(...pt);
       }
       if (q.formato) { filtros.push('formato = ?'); p.push(q.formato); }
       if (q.dup) { filtros.push('dup >= ?'); p.push(Number(q.dup)); }
