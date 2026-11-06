@@ -171,7 +171,7 @@ function Modelar({ p, anuncios, analise, onModelar }) {
   return html`<div class="hoje-acao" style="margin-bottom:16px"><h2>Crie a sua versão desta oferta</h2>
       <p>Modelar é usar a lógica que funciona com outra promessa, outro texto e outro criativo. Comece pelo criativo campeão ou copie um dos prompts abaixo e cole no ChatGPT, Claude ou Gemini.</p>
       <div class="linha">${campeao ? html`<button class="pri" onClick=${() => onModelar(campeao)}>Modelar o criativo campeão</button>` : null}
-        <a class="botao" href="/editor">Abrir o editor de criativo</a><a class="botao" href="/paginas">Criar página ou quiz</a></div></div>
+        <a class="botao" href="/prompts">Ver todos os prompts</a></div></div>
     <div class="grade-2">${prompts.map(([t, txt]) => html`<div class="painel-box"><div class="pb-cab"><b>${t}</b><button class="bt-p" onClick=${() => copiar(txt)}><${Ic} n="copiar" /> Copiar</button></div>
       <div class="pb-corpo"><pre class="prompt">${txt}</pre></div></div>`)}</div>`;
 }

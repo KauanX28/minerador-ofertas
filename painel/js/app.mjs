@@ -16,11 +16,7 @@ import { TelaMinerar } from './telas/minerar.mjs';
 import { TelaConfig } from './telas/config.mjs';
 import { TelaUso } from './telas/uso.mjs';
 import { BoasVindas } from './telas/boasvindas.mjs';
-import { TelaEditor } from './telas/editor.mjs';
-import { TelaVideo } from './telas/video.mjs';
 import { TelaReferencias } from './telas/referencias.mjs';
-import { TelaEntregaveis, TelaEntregavel } from './telas/entregavel.mjs';
-import { TelaPaginas, TelaPagina } from './telas/paginas.mjs';
 import { TelaEscalar } from './telas/escalar.mjs';
 import { TelaRelatorio } from './telas/alertas.mjs';
 
@@ -30,7 +26,7 @@ const MENU = [
   ['/ofertas', 'Ofertas', 'ofertas', (c) => /^\/(ofertas|oferta\/|comparar)/.test(c)],
   ['/criativos', 'Criativos', 'anuncios', (c) => /^\/(criativos|referencias)/.test(c)],
   ['/sites', 'Validar', 'validar', (c) => /^\/(sites|site\/|gateways)/.test(c)],
-  ['/prompts', 'Estúdio', 'estudio', (c) => /^\/(prompts|editor|video|paginas|entregavel)/.test(c)],
+  ['/prompts', 'Estúdio', 'estudio', (c) => c.startsWith('/prompts')],
   ['/listas', 'Minhas listas', 'listas', (c) => c.startsWith('/listas')],
   ['/calculadoras', 'Escalar', 'raio', (c) => /^\/(calculadoras|escalar)/.test(c)],
 ];
@@ -38,13 +34,13 @@ const MENU = [
 const SECOES = [
   { teste: /^\/(criativos|referencias)$/, nome: 'Criativos', itens: [['/criativos', 'Biblioteca'], ['/criativos?modo=significado', 'Por significado'], ['/criativos?modo=padroes', 'Padrões vencedores'], ['/referencias', 'Salvos']] },
   { teste: /^\/(sites|gateways)$/, nome: 'Validar', itens: [['/sites', 'Análise de site'], ['/gateways', 'Gateways']] },
-  { teste: /^\/(prompts|editor|video|paginas|entregavel)$/, nome: 'Estúdio', itens: [['/prompts', 'Prompts'], ['/editor', 'Criativo'], ['/video', 'Vídeo'], ['/paginas', 'Página e quiz'], ['/entregavel', 'Entregável']] },
   { teste: /^\/(calculadoras|escalar)$/, nome: 'Escalar', itens: [['/calculadoras', 'Calculadoras e plano'], ['/escalar', 'Anúncios e vendas']] },
 ];
-// Endereços curtos que levam à tela certa (e nomes antigos que mudaram).
-const ATALHOS = { '/validar': '/sites', '/estudio': '/prompts', '/criar': '/prompts', '/escala': '/calculadoras' };
+// Endereços curtos que levam à tela certa, e telas que saíram (editor, vídeo, página e quiz, entregável) levando aos prompts.
+const ATALHOS = { '/validar': '/sites', '/estudio': '/prompts', '/criar': '/prompts', '/escala': '/calculadoras', '/editor': '/prompts', '/video': '/prompts', '/paginas': '/prompts', '/entregavel': '/prompts' };
+const atalhoDe = (c) => ATALHOS[c] || (/^\/(paginas|entregavel)\/\d+$/.test(c) ? '/prompts' : null);
 // Trecho do Método que explica cada parte do painel.
-const AJUDA = [[/^\/(sites|site\/|gateways)/, '## 2. Validar'], [/^\/(prompts|editor|video|paginas|entregavel)/, '## 3. Modelar'],
+const AJUDA = [[/^\/(sites|site\/|gateways)/, '## 2. Validar'], [/^\/prompts/, '## 3. Modelar'],
   [/^\/(calculadoras|escalar)/, '## 4. Escalar'], [/^\/listas/, '## 4. Escalar'], [/./, '## 1. Encontrar']];
 
 const ROTAS = [
@@ -65,15 +61,9 @@ const ROTAS = [
   [/^\/config$/, () => html`<${TelaConfig} />`],
   [/^\/uso$/, () => html`<${TelaUso} />`],
   [/^\/boas-vindas$/, () => html`<${BoasVindas} />`],
-  [/^\/editor$/, () => html`<${TelaEditor} />`],
-  [/^\/video$/, () => html`<${TelaVideo} />`],
   [/^\/referencias$/, () => html`<${TelaReferencias} />`],
-  [/^\/entregavel$/, () => html`<${TelaEntregaveis} />`],
-  [/^\/paginas$/, () => html`<${TelaPaginas} />`],
   [/^\/escalar$/, () => html`<${TelaEscalar} />`],
   [/^\/relatorio$/, () => html`<${TelaRelatorio} />`],
-  [/^\/paginas\/(\d+)$/, (m) => html`<${TelaPagina} id=${m[1]} />`],
-  [/^\/entregavel\/(\d+)$/, (m) => html`<${TelaEntregavel} id=${m[1]} />`],
 ];
 
 const Marca = ({ onClick }) => html`<a href="/" class="marca" onClick=${onClick}><span class="logo"><${Ic} n="alvo" t=${15} /></span>Minerador</a>`;
@@ -254,7 +244,7 @@ function Painel() {
   const { caminho, busca } = useRota();
   const [mais, setMais] = useState(false), [ajuda, setAjuda] = useState(false);
   useEffect(() => { if (l.perfil && !l.perfil.concluido && caminho !== '/boas-vindas') navegar('/boas-vindas', { trocar: true }); }, [l.perfil, caminho]);
-  useEffect(() => { if (ATALHOS[caminho]) navegar(ATALHOS[caminho] + location.search, { trocar: true }); }, [caminho]);
+  useEffect(() => { const d = atalhoDe(caminho); if (d) navegar(d + (ATALHOS[caminho] ? location.search : ''), { trocar: true }); }, [caminho]);
   let tela = html`<div class="painel-box vazio-acao"><b>Esta página não existe</b><p class="mut">O endereço pode ter mudado. As ofertas continuam no mesmo lugar.</p><a class="botao pri" href="/">Ir para o início</a></div>`;
   for (const [re, f] of ROTAS) { const m = caminho.match(re); if (m) { tela = f(m); break; } }
   return html`<${Menu} caminho=${caminho} />
@@ -290,7 +280,7 @@ function Entrada({ msg }) {
   };
   const passos = [['Encontrar', 'Ofertas low ticket já escaladas, separadas por país, com preço, gateway e checkout.'],
     ['Validar', 'Ritmo de anúncios em 7, 14 e 30 dias, contas no mesmo checkout e o criativo campeão.'],
-    ['Modelar', 'Prompts e editores para criar a sua versão: criativo, página, quiz e entregável.'],
+    ['Modelar', 'Prompts prontos e IA para criar a sua versão: criativo, página, quiz e entregável.'],
     ['Escalar', 'CPA máximo, ROAS, plano de campanha e o funil das ofertas que você está testando.']];
   return html`<div class="entrada">
     <header class="entrada-topo"><span class="marca"><span class="logo"><${Ic} n="alvo" t=${15} /></span>Minerador</span></header>

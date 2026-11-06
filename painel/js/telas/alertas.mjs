@@ -1,4 +1,4 @@
-// Alertas (Telegram, notificação no navegador, e-mail), relatório semanal e chave da extensão do Chrome.
+// Alertas (Telegram e notificação no navegador), relatório semanal e chave da extensão do Chrome.
 import { useState, useLayoutEffect as useEffect } from 'preact/hooks';
 import { html, api, post, aviso, copiar, useDados, useLoja, nomePais, relativo, fmt } from '../base.mjs';
 import { Ic, Esqueleto, Erro, Tabela, Status } from '../ui.mjs';
@@ -26,8 +26,8 @@ export function PainelAlertas({ config, mudar }) {
   return html`<div class="painel-box"><div class="pb-cab"><h2>Alertas</h2></div><div class="pb-corpo col-gap">
     <div class="form-grade"><label class="campo">Avisar quando um acompanhado subir (%)<input type="number" value=${a.subiuPct ?? 30} onInput=${(e) => mudar({ alertas: { ...a, subiuPct: Number(e.target.value) } })} /></label>
       <label class="campo">Oferta nova forte a partir de (anúncios)<input type="number" value=${a.novaMinimo ?? 20} onInput=${(e) => mudar({ alertas: { ...a, novaMinimo: Number(e.target.value) } })} /></label></div>
-    <div class="peq">Telegram: ${d.telegram ? 'ligado' : 'desligado'}. Canal de ofertas do dia: ${d.canal ? 'ligado' : 'desligado'}. E-mail: ${d.email ? 'ligado' : 'desligado'}.</div>
-    ${!d.telegram || !d.canal || !d.email ? html`<details class="tecnico"><summary>Como ligar os canais desligados</summary><p class="peq">Telegram: rode <code>configurar-segredos.ps1</code>. Canal de ofertas: defina <code>TELEGRAM_CANAL_ID</code>. E-mail: defina <code>SMTP_USER</code> e <code>SMTP_PASS</code> (senha de app do Gmail).</p></details>` : null}
+    <div class="peq">Telegram: ${d.telegram ? 'ligado' : 'desligado'}. Canal de ofertas do dia: ${d.canal ? 'ligado' : 'desligado'}.</div>
+    ${!d.telegram || !d.canal ? html`<details class="tecnico"><summary>Como ligar os canais desligados</summary><p class="peq">Telegram: rode <code>configurar-segredos.ps1</code>. Canal de ofertas: defina <code>TELEGRAM_CANAL_ID</code>.</p></details>` : null}
     <div class="linha">${push === 'ligado' ? html`<button onClick=${desligar}>Desligar notificações neste navegador</button>` : html`<button onClick=${ligar} disabled=${push === 'indisponivel'}>Ligar notificações neste navegador</button>`}
       <button onClick=${async () => { const x = await post('/api/alertas/teste', {}); aviso(`Teste enviado: Telegram ${x.telegram ? 'ok' : 'não'}, navegador ${x.push}`); }}>Enviar alerta de teste</button></div>
     <p class="mut peq" style="margin:0">O robô confere a cada rodada: acompanhados que subiram, criativos novos de quem você acompanha, ofertas novas fortes, robô com erro e banco acima de 80%.</p></div></div>`;
@@ -56,7 +56,7 @@ export function TelaRelatorio() {
     ${lista.length ? html`<${Tabela} linhas=${lista} colunas=${[{ t: 'Anunciante', v: (p) => html`<a href=${'/oferta/' + p.page_id}>${p.nome}</a>` }, { t: 'Status', v: (p) => html`<${Status} s=${p.status} />` },
       { t: 'Anúncios', cl: 'dir', v: (p) => fmt(p.ativos) }, { t: '7 dias', cl: 'dir', v: (p) => (p.var7 == null ? '—' : html`<span class=${p.var7 >= 0 ? 'cresce' : 'cai'}>${p.var7 >= 0 ? '+' : ''}${p.var7}</span>`) },
       { t: 'Dias', cl: 'dir', v: (p) => p.dias }, { t: 'Preço', v: (p) => p.preco || '—' }]} />` : html`<div class="vazio peq">${vazio}</div>`}</div>`;
-  return html`<div class="cab"><div><h1>Relatório da semana</h1><p>${nomePais(l.pais)}, gerado ${relativo(d.gerado)}. Toda segunda-feira o robô envia este resumo pelo Telegram${d.email ? ' e por e-mail' : ''}.</p></div>
+  return html`<div class="cab"><div><h1>Relatório da semana</h1><p>${nomePais(l.pais)}, gerado ${relativo(d.gerado)}. Toda segunda-feira o robô envia este resumo pelo Telegram.</p></div>
       <button onClick=${() => window.print()}><${Ic} n="baixar" /> Imprimir / PDF</button></div>
     <div class="kpis"><div class="kpi"><span>Novas fortes</span><b>${d.novas.length}</b></div><div class="kpi"><span>Subindo</span><b>${d.altas.length}</b></div>
       <div class="kpi"><span>Caindo</span><b>${d.caindo.length}</b></div><div class="kpi"><span>Rodadas do robô</span><b>${(d.robo.ok || 0) + (d.robo.erro || 0)}</b><small>${d.robo.erro || 0} com erro</small></div></div>

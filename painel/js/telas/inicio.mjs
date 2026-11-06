@@ -14,7 +14,7 @@ function AcaoDoDia({ top, listas, iniciante }) {
     <div class="linha"><a class="botao pri" href="/escalar">Ver anúncios e vendas</a><a class="botao" href="/calculadoras">Calcular o CPA alvo</a></div></div>`;
   if (modelando.length) return html`<div class="hoje-acao"><span class="mut peq">Modelando</span>
     <h2>Continue a sua versão de ${modelando[0].nome || 'uma oferta salva'}.</h2>
-    <p>No Estúdio você cria o criativo, a página, o quiz e o entregável com os dados da referência.</p>
+    <p>No Estúdio há prompts prontos para criar o criativo, a página, o quiz e o entregável a partir da referência.</p>
     <div class="linha"><a class="botao pri" href="/prompts">Abrir o Estúdio</a><a class="botao" href="/listas">Ver minhas listas</a></div></div>`;
   if (validando.length) return html`<div class="hoje-acao"><span class="mut peq">Validando</span>
     <h2>${validando.length === 1 ? `${validando[0].nome || 'Uma oferta'} está em validação` : `${validando.length} ofertas em validação`}. Veja se continuam subindo.</h2>

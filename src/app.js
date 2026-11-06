@@ -293,22 +293,6 @@ async function atender(req, res) {
       }
       return json(res, { erro: 'rota de IA não encontrada' }, 404);
     }
-    if (rota === '/api/imagens') {
-      // Fotos grátis para o editor (Pexels ou Unsplash, com a chave grátis do dono). Sem chave: lista vazia + aviso.
-      const termo = String(q.q || '').trim().slice(0, 80);
-      if (!termo) return json(res, []);
-      if (process.env.PEXELS_API_KEY) {
-        const r = await fetch(`https://api.pexels.com/v1/search?per_page=24&locale=pt-BR&query=${encodeURIComponent(termo)}`, { headers: { Authorization: process.env.PEXELS_API_KEY } });
-        const d = await r.json();
-        return json(res, (d.photos || []).map((p) => ({ mini: p.src.tiny, grande: p.src.large2x, autor: p.photographer + ' (Pexels)' })));
-      }
-      if (process.env.UNSPLASH_ACCESS_KEY) {
-        const r = await fetch(`https://api.unsplash.com/search/photos?per_page=24&query=${encodeURIComponent(termo)}`, { headers: { Authorization: 'Client-ID ' + process.env.UNSPLASH_ACCESS_KEY } });
-        const d = await r.json();
-        return json(res, (d.results || []).map((p) => ({ mini: p.urls.thumb, grande: p.urls.regular, autor: p.user?.name + ' (Unsplash)' })));
-      }
-      return json(res, { erro: 'Busca de fotos sem chave: configure PEXELS_API_KEY ou UNSPLASH_ACCESS_KEY (grátis). Enquanto isso, envie uma imagem sua.' }, 400);
-    }
     if (rota === '/api/padroes' || rota === '/api/padroes/resumo') {
       // Padrões vencedores do nicho: hooks, formatos e CTAs mais duplicados (SQL) + resumo semanal por IA (cache).
       const b = req.method === 'POST' ? await corpo(req) : q;
@@ -341,18 +325,12 @@ Dados: ${JSON.stringify(dados).slice(0, 6000)}`;
       return json(res, await ia.gerar({ tarefa: 'padroes', entrada, prompt }));
     }
     if (rota.startsWith('/api/projetos')) {
-      // Projetos do usuário: /api/projetos?tipo=entregavel, /api/projetos/123 (GET/POST/DELETE), /api/projetos/ia (etapas com IA).
+      // Projetos do usuário (hoje: diário de testes): /api/projetos?tipo=teste, /api/projetos/123 (GET/POST/DELETE).
       const pj = await import('./projetos.js');
-      if (rota === '/api/projetos/ia' && req.method === 'POST') {
-        const b = await corpo(req);
-        if (b.tipo === 'entregavel') return json(res, await pj.iaEntregavel(b.etapa, b.dados || {}));
-        if (b.tipo === 'pagina' || b.tipo === 'quiz') { const pg = await import('./paginas.js'); return json(res, await pg.iaPagina(b.tipo, b.etapa, b.dados || {})); }
-        return json(res, { erro: 'tipo inválido' }, 400);
-      }
       const idP = rota.split('/')[3];
       if (!idP) {
         if (req.method === 'POST') { const b = await corpo(req); return json(res, await pj.salvarProjeto(b)); }
-        return json(res, await pj.listarProjetos(String(q.tipo || 'entregavel')));
+        return json(res, await pj.listarProjetos(String(q.tipo || 'teste')));
       }
       if (req.method === 'DELETE') { await pj.apagarProjeto(idP); return json(res, { ok: true }); }
       if (req.method === 'POST') { const b = await corpo(req); return json(res, await pj.salvarProjeto({ ...b, id: idP })); }
@@ -382,7 +360,7 @@ Dados: ${JSON.stringify(dados).slice(0, 6000)}`;
       if (rota === '/api/push/inscrever' && req.method === 'POST') { await al.inscreverPush(uid(), (await corpo(req)).inscricao); return json(res, { ok: true }); }
       if (rota === '/api/push/sair' && req.method === 'POST') { await al.sairPush((await corpo(req)).endpoint); return json(res, { ok: true }); }
       if (rota === '/api/alertas/teste' && req.method === 'POST') return json(res, await al.avisar('🔔 Teste de alerta', 'Se você está lendo isto, os alertas estão funcionando.'));
-      if (rota === '/api/relatorio') return json(res, { ...(await al.relatorio({ pais })), telegram: !!process.env.TELEGRAM_BOT_TOKEN, canal: !!process.env.TELEGRAM_CANAL_ID, email: !!process.env.SMTP_USER });
+      if (rota === '/api/relatorio') return json(res, { ...(await al.relatorio({ pais })), telegram: !!process.env.TELEGRAM_BOT_TOKEN, canal: !!process.env.TELEGRAM_CANAL_ID});
     }
     if (rota === '/api/ocultar' && req.method === 'POST') {
       // Esconde um anunciante para sempre: entra na lista de bloqueio e some das listas na hora.

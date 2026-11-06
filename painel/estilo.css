@@ -588,26 +588,8 @@ details.tecnico p, details.tecnico ol { margin-top: 0; color: var(--tinta-2); }
 .lista-ia { margin: 6px 0; padding-left: 20px; } .lista-ia li { padding: 4px 0; } .lista-ia li > span { margin-right: 6px; }
 .lista-ia li button { vertical-align: middle; }
 .story { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: var(--e-2); }
-.editor { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: var(--e-4); align-items: start; }
-.editor-palco { background: repeating-conic-gradient(var(--sup-3) 0 25%, var(--sup) 0 50%) 0 0 / 20px 20px; border: 1px solid var(--linha); border-radius: var(--r-3); min-height: 400px; display: flex; justify-content: center; padding: 10px; overflow: hidden; }
-.fotos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; max-height: 260px; overflow: auto; }
-.fotos button { padding: 0; border: 0; } .fotos img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--r-1); display: block; }
-.video-tela { max-width: 100%; max-height: 620px; height: auto; width: auto; border-radius: var(--r-2); }
-.cena { display: flex; flex-direction: column; gap: 4px; padding-bottom: var(--e-2); border-bottom: 1px solid var(--linha); }
 .ref { display: flex; flex-direction: column; gap: 6px; }
 .ref-rod { display: flex; flex-direction: column; gap: 4px; padding: 0 4px; }
-.titulo-edit { font-family: var(--fonte-num); font-size: 24px; font-weight: 600; border: 1px solid transparent; background: transparent; padding: 2px 6px; margin-left: -6px; min-width: min(320px, 100%); }
-.titulo-edit:hover, .titulo-edit:focus { border-color: var(--linha-forte); background: var(--sup); }
-.conteudo-ent { display: grid; grid-template-columns: 260px 1fr; gap: var(--e-4); align-items: start; }
-.conteudo-ent .nichos-lista { border: 1px solid var(--linha); border-radius: var(--r-3); background: var(--sup); }
-.editor-rico { border: 1px solid var(--linha); border-radius: var(--r-3); background: var(--sup); }
-.barra-rico { display: flex; gap: 4px; padding: 6px; border-bottom: 1px solid var(--linha); flex-wrap: wrap; }
-.doc { min-height: 420px; padding: 18px 22px; line-height: 1.7; outline: none; }
-.doc .ProseMirror { outline: none; min-height: 400px; } .doc h2 { font-size: 20px; } .doc h3 { font-size: 16px; }
-.capa-palco { gap: var(--e-3); flex-wrap: wrap; }
-.capa-cv { max-height: 520px; max-width: 48%; height: auto; width: auto; border-radius: var(--r-1); }
-.previa { border: 1px solid var(--linha); border-radius: var(--r-3); overflow: hidden; background: var(--branco); max-width: 440px; margin: 0 auto; }
-.previa iframe { width: 100%; height: 760px; border: 0; display: block; }
 
 /* ================= celular ================= */
 @media (max-width: 1100px) {
@@ -661,8 +643,6 @@ details.tecnico p, details.tecnico ol { margin-top: 0; color: var(--tinta-2); }
   .barra-res select { max-width: 150px; }
   .cab .abas { width: 100%; }
   .mini-ads { grid-template-columns: repeat(2, 1fr); }
-  .editor, .conteudo-ent { grid-template-columns: 1fr; }
-  .capa-cv { max-width: 100%; }
   .oferta-topo { grid-template-columns: 1fr; }
   .oferta-acoes { justify-content: flex-start; }
   .oferta-acoes .pri { flex: 1 1 100%; order: -1; padding: 10px; }

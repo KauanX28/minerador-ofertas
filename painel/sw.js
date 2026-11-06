@@ -1,6 +1,6 @@
 // Service worker: guarda a casca do painel para abrir rápido e funcionar como app instalado.
 // Dados (/api) nunca vêm do cache: sempre frescos.
-const CACHE = 'minerador-v3';
+const CACHE = 'minerador-v4';
 self.addEventListener('push', (e) => {
   let d = {}; try { d = e.data.json(); } catch { d = { titulo: 'Minerador', corpo: e.data?.text() || '' }; }
   e.waitUntil(self.registration.showNotification(d.titulo || 'Minerador', { body: d.corpo || '', icon: '/icone-192.png', badge: '/icone-192.png', data: { url: d.url || '/' } }));

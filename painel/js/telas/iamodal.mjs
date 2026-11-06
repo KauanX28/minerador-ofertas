@@ -64,11 +64,6 @@ export function ModalIA({ ad, onFechar }) {
         <label class="campo">Seu produto (a IA cria material novo para ele, sem copiar a referência)<input value=${produto} onInput=${(e) => setProduto(e.target.value)} placeholder="ex.: desafio de 21 dias de pilates para mães" /></label>
         <div class="atalhos" style="margin-top:10px">${TIPOS.map(([k, n]) => html`<button class=${'chip grande' + (k === tipo ? ' on' : '')} onClick=${() => gerar(k)} disabled=${gerando}>${n}</button>`)}</div>
         ${gerando ? html`<p class="mut">Gerando…</p>` : g?.semIA ? html`<${SemIA} resp=${g} onTentarLocal=${() => gerar(tipo, true)} />` : g?.erro ? html`<div class="aviso-erro">${g.erro}</div>` : g?.resultado ? html`<${Resultado} tipo=${tipo} r=${g.resultado} />` : html`<p class="mut peq">Escolha o que gerar acima.</p>`}
-        ${['storyboard', 'roteiros'].includes(tipo) && g?.resultado ? html`<button style="margin-top:8px" onClick=${() => {
-          const cenas = tipo === 'storyboard' ? (g.resultado.quadros || []).map((q) => ({ texto: q.texto_tela || q.fala || q.imagem, seg: 3, img: null }))
-            : (g.resultado.roteiros?.[0]?.cenas || []).map((c) => ({ texto: c.fala, seg: 3, img: null }));
-          sessionStorage.videoCenas = JSON.stringify(cenas.filter((c) => c.texto)); onFechar(); navegar('/video'); }}>Fazer vídeo com estes textos</button>` : null}
-        ${tipo === 'hooks' && g?.resultado?.hooks?.length ? html`<button style="margin-top:8px" onClick=${() => { sessionStorage.editorTextos = JSON.stringify(g.resultado.hooks); onFechar(); navegar('/editor'); }}>Usar no editor de criativo</button>` : null}
       </div></div>` : null}
   </${Modal}>`;
 }

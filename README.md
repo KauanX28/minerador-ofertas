@@ -99,7 +99,6 @@ Sem nenhuma chave, tudo funciona: cada função de IA mostra o prompt pronto par
 |---|---|---|---|
 | GitHub Secrets e Vercel | `GEMINI_API_KEY` | análise e geração | https://aistudio.google.com/apikey |
 | GitHub Secrets e Vercel | `GROQ_API_KEY` | reserva da IA e transcrição dos vídeos (Whisper) | https://console.groq.com/keys |
-| Vercel | `PEXELS_API_KEY` ou `UNSPLASH_ACCESS_KEY` | busca de fotos no editor de criativo | https://www.pexels.com/api/ ou https://unsplash.com/developers |
 
 - No nível grátis do Gemini o Google pode usar os textos enviados para melhorar os modelos. Não envie dados pessoais.
 - Também dá para salvar uma chave só no navegador, em Configurações → IA. Ela não vai para o servidor.
@@ -115,7 +114,6 @@ Sem nenhuma chave, tudo funciona: cada função de IA mostra o prompt pronto par
 - **Telegram:** já configurado pelo `configurar-segredos.ps1`. Você recebe avisos quando um anunciante que acompanha sobe X%, lança criativos novos, quando aparece oferta nova forte, quando o robô quebra e quando o banco passa de 80%. Os limites ficam em Configurações → Alertas.
 - **Notificação no navegador (celular e computador):** em Configurações → Alertas, clique em "Ligar notificações". As chaves VAPID são geradas sozinhas.
 - **Canal grátis com as ofertas do dia:** crie um canal no Telegram, adicione o seu bot como administrador e salve o id do canal (ex.: `@meucanal`) no secret `TELEGRAM_CANAL_ID`. Para os links abrirem no painel, crie a variável `PAINEL_URL` (Settings → Variables) com o endereço da Vercel.
-- **E-mail (relatório semanal):** gere uma "senha de app" no Gmail e salve `SMTP_USER` (seu Gmail), `SMTP_PASS` (a senha de app) e, se quiser outro destino, `ALERTA_EMAIL` nos secrets do GitHub.
 - **Relatório da semana:** sai toda segunda-feira e também fica no menu Trabalho → Relatório da semana.
 
 ### Extensão do Chrome (grátis)

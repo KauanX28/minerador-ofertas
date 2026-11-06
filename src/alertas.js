@@ -1,4 +1,4 @@
-// Alertas e acompanhamento (Fase 9): Telegram, notificação no navegador (Web Push com VAPID) e e-mail opcional
+// Alertas e acompanhamento (Fase 9): Telegram e notificação no navegador (Web Push com VAPID)
 // (Gmail com senha de app). Gatilhos: acompanhado subiu X%, oferta nova forte no nicho, criativo novo de concorrente
 // salvo, raspador quebrado e banco acima de 80% (estes dois já existem no robô). Mais: ofertas do dia num canal do
 // Telegram e relatório semanal.
@@ -36,22 +36,11 @@ async function enviarPush(titulo, corpo, url = '/') {
   return n;
 }
 
-async function enviarEmail(assunto, texto) {
-  const { SMTP_USER: u, SMTP_PASS: p, ALERTA_EMAIL: para } = process.env;
-  if (!u || !p) return false;
-  try {
-    const { default: nodemailer } = await import('nodemailer');
-    await nodemailer.createTransport({ service: 'gmail', auth: { user: u, pass: p } }).sendMail({ from: u, to: para || u, subject: assunto, text: texto });
-    return true;
-  } catch { return false; }
-}
-
 // Envia por todos os canais configurados.
-export async function avisar(titulo, texto, { url = '/', log = () => {}, email = false } = {}) {
+export async function avisar(titulo, texto, { url = '/', log = () => {} } = {}) {
   const tg = await alertar(`${titulo}\n${texto}`, { log });
   const push = await enviarPush(titulo, texto, url);
-  const em = email ? await enviarEmail('Minerador: ' + titulo, texto) : false;
-  return { telegram: tg, push, email: em };
+  return { telegram: tg, push };
 }
 
 // Não repete o mesmo alerta (chave por tipo, página e dia).
@@ -127,7 +116,7 @@ export async function relatorioSemanal({ pais = 'BR', log = () => {} } = {}) {
   const linhas = (t, l) => (l.length ? `\n${t}\n` + l.slice(0, 5).map((p) => `• ${p.nome}: ${p.ativos} anúncios${p.var7 ? ` (${p.var7 > 0 ? '+' : ''}${p.var7} na semana)` : ''}`).join('\n') : '');
   const texto = `Resumo da semana (${pais})` + linhas('🆕 Novas fortes:', r.novas) + linhas('📈 Maiores altas:', r.altas) + linhas('🎯 Melhores para modelar:', r.melhoresParaModelar)
     + `\n🤖 Robô: ${r.robo.ok || 0} rodadas ok, ${r.robo.erro || 0} com erro.`;
-  await avisar('📊 Relatório semanal', texto, { url: '/relatorio', log, email: true });
+  await avisar('📊 Relatório semanal', texto, { url: '/relatorio', log });
   log('  relatório semanal enviado');
   return true;
 }
