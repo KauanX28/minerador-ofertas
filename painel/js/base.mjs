@@ -141,6 +141,9 @@ export const bib = {
   busca: (q) => `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${loja.pais}&q=${encodeURIComponent(q)}&search_type=keyword_unordered&media_type=all`,
   anuncio: (id) => `https://www.facebook.com/ads/library/?id=${id}`,
 };
+// Se o termo digitado é o nome de um nicho das Configurações (sem ligar para acento e maiúscula), devolve o nicho.
+const semAcento = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+export const nichoPorNome = (t) => Object.keys(loja.config?.nichos || {}).find((n) => semAcento(n) === semAcento(t)) || null;
 export const nomeGateway = (id) => loja.config?.gateways?.find((g) => g.id === id)?.nome || id;
 
 // ---------- exportação ----------

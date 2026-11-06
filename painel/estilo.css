@@ -292,6 +292,9 @@ fieldset.grupo legend { font-size: var(--t-1); font-weight: 500; color: var(--ti
 .foco { display: flex; justify-content: space-between; align-items: center; gap: var(--e-3); background: var(--sup); border: 1px solid var(--linha); border-radius: var(--r-3); padding: 10px 14px; margin: 0 0 var(--e-3); flex-wrap: wrap; }
 .foco.ao-vivo { justify-content: flex-start; border-color: var(--acento); }
 .foco .ponto { margin-top: 2px; background: var(--cai); }
+.foco.ao-vivo .ponto { background: var(--sobe); }
+.foco.foco-quieto { justify-content: flex-start; gap: var(--e-2); padding: 7px 12px; background: transparent; border-style: dashed; }
+.foco.foco-quieto .ponto { background: var(--suave-2); margin: 0; }
 .vazio { color: var(--suave); padding: var(--e-6) var(--e-5); text-align: center; }
 .vazio-acao { padding: var(--e-6) var(--e-5); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .vazio-acao b { font-size: var(--t-4); }

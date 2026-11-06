@@ -1,8 +1,9 @@
 // Biblioteca de criativos coletados: os mais duplicados são os campeões.
 import { useState } from 'preact/hooks';
-import { html, useDados, useParams, useLoja, nomePais, fmt, rodarTarefa, exportarCSV, exportarXLSX, diasDesde, bib, post, loja } from '../base.mjs';
+import { html, useDados, useParams, useLoja, nomePais, fmt, exportarCSV, exportarXLSX, diasDesde, bib, post, loja } from '../base.mjs';
 import { Folha } from '../ui.mjs';
 import { ModalIA } from './iamodal.mjs';
+import { FocoBusca } from '../foco.mjs';
 import { PadroesVencedores } from './referencias.mjs';
 
 // Busca por significado: a frase vira vetor no próprio navegador (mesmo modelo do robô) e o banco devolve os anúncios mais parecidos.
@@ -43,7 +44,7 @@ const COLS = [['Página', (a) => a.page_name], ['Dias', (a) => diasDesde(a.inici
 export function TelaCriativos() {
   const l = useLoja();
   const [f, mudar] = useParams({ modo: '', texto: '', formato: '', dup: '', ordem: 'dup', cta: '', plataforma: '', gateway: '', dias: '', marcas: '' });
-  const [modelar, setModelar] = useState(null), [filtros, setFiltros] = useState(false);
+  const [modelar, setModelar] = useState(null), [filtros, setFiltros] = useState(false), [versao, setVersao] = useState(0), [aoVivo, setAoVivo] = useState(false);
   const modo = f.modo || 'palavra';
   const { modo: _m, ...busca } = f;
   const qs = new URLSearchParams({ ...busca, limite: 240 }).toString();
@@ -52,7 +53,7 @@ export function TelaCriativos() {
   const textos = { palavra: 'anúncios ativos coletados. Quanto mais variações, mais o anunciante confia no criativo.',
     significado: 'descreva uma ideia e veja criativos com a mesma ideia, mesmo com outras palavras ou em outro idioma.',
     padroes: 'o que os criativos mais duplicados do nicho têm em comum: hooks, formatos e chamadas.' };
-  const r = useDados(modo === 'palavra' ? '/api/anuncios?' + qs : null, [qs, modo]);
+  const r = useDados(modo === 'palavra' ? '/api/anuncios?' + qs : null, [qs, modo, versao]);
   const lista = r.dados || [];
   return html`
     <div class="cab"><div><h1>${modo === 'significado' ? 'Busca por significado' : modo === 'padroes' ? 'Padrões vencedores' : 'Criativos'}</h1><p>${nomePais(l.pais)}: ${textos[modo]}</p></div></div>
@@ -72,14 +73,15 @@ export function TelaCriativos() {
       </div>
       <label class="check-l"><input type="checkbox" checked=${f.marcas === '1'} onChange=${(e) => mudar({ marcas: e.target.checked ? '1' : '' })} /> Mostrar também marcas grandes</label>
     </${Folha}>` : null}
-    ${r.erro ? html`<${Erro} msg=${r.erro} />` : r.carregando ? html`<${Esqueleto} cards=${8} />` : html`
+    ${f.texto ? html`<${FocoBusca} termo=${f.texto} onAtualizar=${() => setVersao((v) => v + 1)} onEstado=${setAoVivo} />` : null}
+    ${r.erro ? html`<${Erro} msg=${r.erro} />` : r.carregando && !r.dados ? html`<${Esqueleto} cards=${8} />` : html`
       <div class="barra-res"><span class="mut">${fmt(lista.length)} criativos${lista.length >= 240 ? ' (os 240 primeiros)' : ''}${ativos ? html` · <button class="link" onClick=${limpar}>limpar filtros</button>` : null}</span>
-        <div class="linha">${f.texto ? html`<button onClick=${() => rodarTarefa({ tipo: 'minerar', palavras: f.texto, nicho: 'Avulso', pais: l.pais })}><${Ic} n="minerar" /> Procurar "${f.texto}" na Biblioteca</button>` : null}
+        <div class="linha">
           <details class="menu-exp"><summary class="botao"><${Ic} n="baixar" /> Exportar</summary><div class="menu-exp-lista">
             <button onClick=${(e) => { exportarCSV('criativos', lista, COLS); e.target.closest('details').open = false; }}>Planilha CSV</button>
             <button onClick=${(e) => { exportarXLSX('criativos', lista, COLS); e.target.closest('details').open = false; }}>Excel (.xlsx)</button></div></details></div></div>
       ${lista.length ? html`<div class="ads">${lista.map((a) => html`<${CartaoAnuncio} a=${a} onModelar=${setModelar} />`)}</div>`
-        : html`<${Vazio} titulo="Nenhum criativo com esses filtros" texto=${f.texto ? `Nada coletado com "${f.texto}". O robô pode procurar esse termo agora na Biblioteca de Anúncios.` : 'Tire alguns filtros para ver mais criativos.'}
-            acao=${f.texto ? `Procurar "${f.texto}" agora` : 'Limpar filtros'} onAcao=${f.texto ? () => rodarTarefa({ tipo: 'minerar', palavras: f.texto, nicho: 'Avulso', pais: l.pais }) : limpar} />`}`}`}
+        : aoVivo ? html`<${Vazio} titulo=${`Buscando "${f.texto}" agora`} texto="Os criativos aparecem aqui em instantes, conforme o robô lê a Biblioteca de Anúncios. Não precisa recarregar." />`
+        : html`<${Vazio} titulo=${f.texto ? `Nada encontrado para "${f.texto}"` : 'Nenhum criativo com esses filtros'} texto=${f.texto ? 'O robô procurou na Biblioteca de Anúncios e não achou criativos com esses filtros. Tente outra palavra.' : 'Tire alguns filtros para ver mais criativos.'} acao="Limpar filtros" onAcao=${limpar} />`}`}`}
     ${modelar ? html`<${ModalIA} ad=${modelar} onFechar=${() => setModelar(null)} />` : null}`;
 }

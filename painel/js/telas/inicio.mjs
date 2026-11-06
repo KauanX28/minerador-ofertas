@@ -1,7 +1,7 @@
 // Início: a ação de hoje, o progresso no método e as ofertas para o perfil do usuário.
 import { html, useLoja, useDados, nomePais, fmt, relativo, compacto } from '../base.mjs';
 import { Ic, CartaoOferta, Esqueleto, Vazio, Erro, Status } from '../ui.mjs';
-import { FocoNicho } from '../foco.mjs';
+import { FocoBusca } from '../foco.mjs';
 import { useState } from 'preact/hooks';
 
 // A ação principal do dia: depende do que já está na lista de trabalho.
@@ -64,7 +64,7 @@ export function TelaInicio() {
         : html`<${AcaoDoDia} top=${paraVoce.dados?.itens?.[0]} listas=${listas.dados || []} iniciante=${iniciante} />`}
       <${Trilha} escaladas=${d?.escaladas} listas=${listas.dados || []} />
     </div>
-    ${l.perfil?.nichos?.[0] ? html`<div class="secao"><${FocoNicho} nicho=${l.perfil.nichos[0]} onAtualizar=${() => setVersao((v) => v + 1)} /></div>` : null}
+    ${l.perfil?.nichos?.[0] ? html`<div class="secao"><${FocoBusca} nicho=${l.perfil.nichos[0]} forcar=${false} onAtualizar=${() => setVersao((v) => v + 1)} /></div>` : null}
     <section class="secao"><div class="secao-cab"><h2>Melhores para modelar no seu perfil</h2><a href="/ofertas?ordem=oportunidade">Ver todas</a></div>
       ${semNicho && todos.dados?.itens?.length ? html`<p class="mut peq">Seus nichos ainda não têm ofertas coletadas em ${nomePais(l.pais)}, então mostramos as melhores de todos. O robô já incluiu seus nichos na próxima rodada.</p>` : null}
       ${paraVoce.carregando ? html`<${Esqueleto} cards=${4} />` : paraVoce.dados?.itens?.length ? html`<div class="feed">${paraVoce.dados.itens.map((p) => html`<${CartaoOferta} p=${p} />`)}</div>`

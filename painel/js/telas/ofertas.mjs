@@ -1,7 +1,7 @@
 // Feed de ofertas (cards ou tabela), filtros no servidor, atalhos e comparação lado a lado.
 import { useState } from 'preact/hooks';
-import { html, loja, definir, useLoja, useDados, useParams, nomePais, fmt, TIPOS_OFERTA, STATUS, exportarCSV, exportarXLSX, bib, brl, rodarTarefa } from '../base.mjs';
-import { FocoNicho } from '../foco.mjs';
+import { html, loja, definir, useLoja, useDados, useParams, nomePais, fmt, TIPOS_OFERTA, STATUS, exportarCSV, exportarXLSX, bib, brl, nichoPorNome } from '../base.mjs';
+import { FocoBusca } from '../foco.mjs';
 import { Ocultar } from '../ui.mjs';
 import { Ic, CartaoOferta, Tabela, Esqueleto, Vazio, Erro, Status, Gws, Preco, Score, Spark, Ent, Estrela, Paginacao, Abas, comparar, Grafico, Folha, Delta } from '../ui.mjs';
 
@@ -45,7 +45,7 @@ export function TelaOfertas() {
       <${Abas} abas=${[['anunciantes', 'Por anunciante'], ['checkout', 'Por checkout']]} ativa=${f.aba} onTroca=${(aba) => mudar({ aba })} /></div>
     <div class="atalhos rolar-x" role="group" aria-label="Atalhos">${ATALHOS.map(([k, nome, v]) => html`<button class=${'chip grande' + (atalho === k ? ' on' : '')} aria-pressed=${atalho === k} onClick=${() => mudar(v)}>${nome}</button>`)}</div>
     <div class="barra-filtros">
-      <label class="campo-inline"><${Ic} n="busca" /><input placeholder="Filtrar por nome, produto ou site" aria-label="Filtrar por nome, produto ou site" value=${f.busca} onChange=${(e) => mudar({ busca: e.target.value })} /></label>
+      <label class="campo-inline"><${Ic} n="busca" /><input placeholder="Nicho, nome, produto ou site" aria-label="Buscar por nicho, nome, produto ou site" value=${f.busca} onChange=${(e) => { const t = e.target.value.trim(), n = nichoPorNome(t); mudar(n ? { nicho: n, busca: '' } : { busca: t }); }} /></label>
       <select value=${f.nicho} onChange=${(e) => mudar({ nicho: e.target.value })} aria-label="Nicho" class="sel-nicho"><option value="">Todos os nichos</option>${Object.keys(l.config?.nichos || {}).map((n) => html`<option>${n}</option>`)}</select>
       <select value=${f.preco} onChange=${(e) => mudar({ preco: e.target.value })} aria-label="Preço máximo">${[['27', 'Até R$ 27'], ['47', 'Até R$ 47'], ['97', 'Até R$ 97'], ['197', 'Até R$ 197'], ['0', 'Qualquer preço']].map(([v, t]) => html`<option value=${v}>${t}</option>`)}</select>
       <button class=${ativos ? 'on' : ''} onClick=${() => setMais(true)} aria-haspopup="dialog"><${Ic} n="filtro" /> Filtros${ativos ? ` (${ativos})` : ''}</button>
@@ -77,11 +77,12 @@ export function TelaOfertas() {
         <label class="check-l"><input type="checkbox" checked=${f.sempreco === '1'} onChange=${(e) => mudar({ sempreco: e.target.checked ? '1' : '0' })} /> Ofertas sem preço lido ainda</label>
         <label class="check-l"><input type="checkbox" checked=${f.marcas === '1'} onChange=${(e) => mudar({ marcas: e.target.checked ? '1' : '' })} /> Marcas grandes (ficam ocultas)</label></fieldset>
     </${Folha}>` : null}
-    ${f.nicho && f.nicho !== 'Avulso' ? html`<${FocoNicho} nicho=${f.nicho} onAtualizar=${() => setVersao((v) => v + 1)} onEstado=${setAoVivo} />` : null}
+    ${f.busca ? html`<${FocoBusca} termo=${f.busca} onAtualizar=${() => setVersao((v) => v + 1)} onEstado=${setAoVivo} />`
+      : f.nicho && f.nicho !== 'Avulso' ? html`<${FocoBusca} nicho=${f.nicho} onAtualizar=${() => setVersao((v) => v + 1)} onEstado=${setAoVivo} />` : null}
     ${f.gringa === '1' && l.pais === 'BR' ? html`<div class="dica">Escolha um país de fora (Estados Unidos, México, Espanha) no seletor do topo: este atalho mostra ofertas de lá que ainda não rodam no Brasil.</div>` : null}
     ${r.erro ? html`<${Erro} msg=${r.erro} />` : !formatoOk ? html`<${Esqueleto} cards=${f.visao === 'cards' && f.aba === 'anunciantes' ? 8 : 0} linhas=${10} />` : f.aba === 'checkout' ? html`<${ListaCheckout} lista=${itens} />` : html`
-      ${!itens.length && f.busca ? html`<div class="foco"><div><b>Nada coletado com "${f.busca}" ainda.</b><div class="mut peq">O robô pode procurar esse termo agora na Biblioteca de Anúncios.</div></div><button class="pri" onClick=${() => rodarTarefa({ tipo: 'minerar', palavras: f.busca, nicho: 'Avulso', pais: l.pais })}>Procurar "${f.busca}" agora</button></div>` : null}
-      ${!itens.length && aoVivo && f.nicho ? html`<${Vazio} titulo="Buscando agora" texto="As ofertas deste nicho aparecem aqui em instantes, conforme o robô lê a Biblioteca de Anúncios." />`
+      ${!itens.length && aoVivo ? html`<${Vazio} titulo=${'Buscando ' + (f.busca ? `"${f.busca}"` : f.nicho) + ' agora'} texto="As ofertas aparecem aqui em instantes, conforme o robô lê a Biblioteca de Anúncios. Não precisa recarregar." />`
+      : !itens.length && f.busca ? html`<${Vazio} titulo=${`Nada encontrado para "${f.busca}"`} texto="O robô procurou na Biblioteca de Anúncios e não achou ofertas com esses filtros. Tente outra palavra ou tire o limite de preço e o tipo." acao="Limpar filtros" onAcao=${limpar} />`
       : !itens.length ? html`<${Vazio} titulo="Nenhuma oferta com esses filtros" texto=${f.tipo ? 'Tente "Qualquer preço" ou o atalho Infoproduto. Ofertas ainda sem classificação aparecem em Filtros, Tipo de oferta, Todos.' : 'Mude os filtros ou peça ao robô para minerar novas palavras.'}
         acao="Limpar filtros" onAcao=${limpar} />`
       : f.visao === 'cards' ? html`<div class="feed">${itens.map((p) => html`<${CartaoOferta} p=${p} selecionado=${l.comparar.includes(p.page_id)} onSelecionar=${comparar.alternar} />`)}</div>`

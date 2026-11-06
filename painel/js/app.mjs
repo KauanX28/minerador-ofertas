@@ -1,7 +1,7 @@
 // Casca do painel: entrada pública, login, boas-vindas, menu de 7 itens, busca global, conta, ajuda e rotas.
 import { render } from 'preact';
 import { useEffect, useRef, useState, useErrorBoundary } from 'preact/hooks';
-import { html, loja, definir, useLoja, useRota, navegar, api, post, aviso, acompanhar, PAISES, nomePais, fmt } from './base.mjs';
+import { html, loja, definir, useLoja, useRota, navegar, api, post, aviso, acompanhar, PAISES, nomePais, fmt, nichoPorNome } from './base.mjs';
 import { Ic, Folha } from './ui.mjs';
 import { TelaInicio } from './telas/inicio.mjs';
 import { TelaOfertas, TelaComparar } from './telas/ofertas.mjs';
@@ -162,7 +162,8 @@ function BuscaGlobal() {
     const gw = loja.config?.gateways?.find((g) => termo.toLowerCase().includes(g.raiz) || g.nome.toLowerCase() === termo.toLowerCase() || g.id === termo.toLowerCase());
     if (gw && !/\/[\w-]{4,}/.test(termo.replace(/^https?:\/\//, ''))) return ir('/gateways/' + gw.id);
     if (/^(https?:\/\/)?[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(termo)) return ir('/site/' + encodeURIComponent(termo.replace(/^https?:\/\//, '').split('/')[0]));
-    ir('/ofertas?busca=' + encodeURIComponent(termo) + '&tipo=');
+    const nicho = nichoPorNome(termo);
+    ir(nicho ? '/ofertas?nicho=' + encodeURIComponent(nicho) : '/ofertas?busca=' + encodeURIComponent(termo) + '&tipo=');
   };
   const vazio = res && !res.anunciantes.length && !res.dominios.length && !res.checkouts.length && !res.gateways.length;
   const op = (url, conteudo) => html`<button type="button" onMouseDown=${(e) => e.preventDefault()} onClick=${() => ir(url)}>${conteudo}</button>`;
@@ -181,7 +182,8 @@ function BuscaGlobal() {
         <${Ic} n="gateways" /><span>${c.produto || c.checkout}</span><small class="mut">${c.preco || ''}</small>`))}` : null}
       ${res.gateways.length ? html`<div class="auto-sec">Gateways</div>${res.gateways.map((g) => op('/gateways/' + g.id, html`<${Ic} n="gateways" /><span>${g.nome}</span>`))}` : null}
       ${vazio ? html`<div class="auto-vazio mut">Nada coletado com "${q}" ainda.</div>` : null}
-      <div class=${vazio ? '' : 'auto-acao'}>${op('/minerar?palavras=' + encodeURIComponent(q.trim()), html`<${Ic} n="minerar" /><span>Pedir ao robô para minerar "${q.trim()}"</span>`)}</div>
+      <div class=${vazio ? '' : 'auto-acao'}>${op(nichoPorNome(q) ? '/ofertas?nicho=' + encodeURIComponent(nichoPorNome(q)) : '/ofertas?busca=' + encodeURIComponent(q.trim()) + '&tipo=',
+        html`<${Ic} n="minerar" /><span>${nichoPorNome(q) ? `Ver e buscar ofertas do nicho ${nichoPorNome(q)}` : `Buscar "${q.trim()}" na Biblioteca agora`}</span>`)}</div>
     </div>` : null}
   </form>`;
 }

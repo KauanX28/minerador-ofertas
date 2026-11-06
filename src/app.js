@@ -477,22 +477,26 @@ Dados: ${JSON.stringify(dados).slice(0, 6000)}`;
       return json(res, r, r.erro ? 400 : 200);
     }
     if (rota === '/api/foco') {
-      // Foco num nicho: ao escolher o nicho no painel, o robô busca ofertas dele na hora (se não buscou nas últimas 6 h).
+      // Foco num nicho ou num termo digitado: o robô busca na hora e o painel mostra os resultados chegando.
+      // Sem "forcar", só busca se a última busca tiver mais de 6 h; com "forcar" (o usuário escolheu agora), só evita repetir em menos de 15 min.
       const b = req.method === 'POST' ? await corpo(req) : q;
-      const nicho = String(b.nicho || ''), paisF = String(b.pais || pais).toUpperCase();
-      if (!nicho) return json(res, { erro: 'informe o nicho' }, 400);
-      const desc = `Minerando nicho ${nicho} (${paisF})`;
+      const termo = String(b.termo || '').trim().slice(0, 80);
+      const nicho = termo ? '' : String(b.nicho || ''), paisF = String(b.pais || pais).toUpperCase();
+      if (!nicho && !termo) return json(res, { erro: 'informe o nicho ou o termo' }, 400);
+      const desc = termo ? `Minerando: ${termo}` : `Minerando nicho ${nicho} (${paisF})`;
       const tarefa = NUVEM ? await get('SELECT id, status, log, inicio, fim, criado FROM tarefas WHERE descricao = ? ORDER BY id DESC LIMIT 1', [desc])
         : local.descricao === desc ? { status: local.rodando ? 'rodando' : 'concluido', log: local.log.join('\n'), inicio: local.inicio / 1000, fim: local.fim ? local.fim / 1000 : null }
         : local.fila.some((x) => x.descricao === desc) ? { status: 'pendente', log: `Na fila: o robô está terminando "${local.descricao}"` } : null;
-      const ultima = (await get('SELECT MAX(quando) q FROM buscas WHERE nicho = ? AND pais = ?', [nicho, paisF]))?.q || null;
-      const estado = { nicho, pais: paisF, ultimaBusca: ultima, status: tarefa?.status || null, rodando: ['pendente', 'rodando'].includes(tarefa?.status),
+      const ultima = (termo ? await get('SELECT MAX(quando) q FROM buscas WHERE LOWER(palavra) = LOWER(?) AND pais = ?', [termo, paisF])
+        : await get('SELECT MAX(quando) q FROM buscas WHERE nicho = ? AND pais = ?', [nicho, paisF]))?.q || null;
+      const estado = { nicho, termo, pais: paisF, ultimaBusca: ultima, status: tarefa?.status || null, rodando: ['pendente', 'rodando'].includes(tarefa?.status),
         log: String(tarefa?.log || '').split('\n').filter(Boolean).slice(-6), viva: Date.now() / 1000 - Number((await get("SELECT valor FROM ajustes WHERE chave = 'fila_viva'"))?.valor || 0) < 25 };
       if (req.method !== 'POST') return json(res, estado);
       if (estado.rodando) return json(res, { ...estado, aviso: 'o robô já está buscando este nicho' });
-      if (!b.forcar && ultima && agora() - ultima < 6 * 3600) return json(res, { ...estado, recente: true });
-      if (!(await lerConfig()).nichos?.[nicho]) return json(res, { erro: 'nicho não existe nas Configurações' }, 400);
-      const r = await enfileirar({ tipo: 'minerar', nicho, pais: paisF, top: 12, sites: 3 }, 'foco');
+      if (ultima && agora() - ultima < (b.forcar ? 15 * 60 : 6 * 3600)) return json(res, { ...estado, recente: true });
+      if (nicho && !(await lerConfig()).nichos?.[nicho]) return json(res, { erro: 'nicho não existe nas Configurações' }, 400);
+      const r = await enfileirar(termo ? { tipo: 'minerar', palavras: termo, nicho: 'Avulso', pais: paisF, top: 12, sites: 3 }
+        : { tipo: 'minerar', nicho, pais: paisF, top: 12, sites: 3 }, 'foco');
       return json(res, { ...estado, ...r, rodando: !!r.iniciado, status: 'pendente' });
     }
     if (rota === '/api/tarefa') return json(res, await estadoTarefa());

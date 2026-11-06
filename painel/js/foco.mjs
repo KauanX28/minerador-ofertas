@@ -1,49 +1,53 @@
-// Foco em tempo real: ao escolher um nicho, o robô começa a buscar ofertas dele na hora (se não buscou nas
-// últimas 6 h) e a lista do painel se atualiza sozinha enquanto ele trabalha.
+// Busca ao vivo: ao escolher um nicho ou digitar um termo, o robô começa a buscar na hora e a lista
+// se atualiza sozinha enquanto ele trabalha. Sem botão para pedir: escolher já é o pedido.
 import { useState, useLayoutEffect as useEffect, useRef } from 'preact/hooks';
 import { html, api, post, loja, relativo, nomePais } from './base.mjs';
 
-const disparados = new Set(); // não pede o mesmo nicho duas vezes na mesma sessão
+// Lembra o que já foi pedido nesta sessão (por 15 min) para não pedir o mesmo de novo ao voltar à tela.
+const pedidos = new Map();
+const JANELA = 15 * 60 * 1000;
 
-export function FocoNicho({ nicho, onAtualizar, onEstado, automatico = true }) {
-  const [st, setSt] = useState(null), [enviando, setEnviando] = useState(false);
-  const pais = loja.pais, chave = nicho + '|' + pais;
+export function FocoBusca({ nicho, termo, onAtualizar, onEstado, automatico = true, forcar = true }) {
+  const [st, setSt] = useState(null);
+  const pais = loja.pais, alvo = termo ? { termo } : { nicho }, nome = termo ? `"${termo}"` : nicho;
+  const chave = (termo ? 't:' + termo.toLowerCase() : 'n:' + nicho) + '|' + pais;
   const tAtualizar = useRef(0), eraRodando = useRef(false);
-  const pedir = async (forcar) => {
-    setEnviando(true);
-    try { const r = await post('/api/foco', { nicho, pais, forcar }); setSt(r); disparados.add(chave); } catch (e) { setSt({ erro: e.message }); }
-    setEnviando(false);
-  };
   useEffect(() => {
-    if (!nicho) return;
+    if (!nicho && !termo) return;
     let vivo = true, timer;
+    setSt(null);
+    const qs = new URLSearchParams({ ...alvo, pais }).toString();
     const ciclo = async () => {
-      let r; try { r = await api(`/api/foco?nicho=${encodeURIComponent(nicho)}&pais=${pais}`); } catch { r = null; }
+      let r; try { r = await api('/api/foco?' + qs); } catch { r = null; }
       if (!vivo) return;
       if (r) {
         setSt((s) => ({ ...s, ...r }));
         onEstado?.(r.rodando);
-        // enquanto o robô trabalha, a lista recarrega a cada ~12 s; ao terminar, uma última vez
-        if (r.rodando && Date.now() - tAtualizar.current > 12000) { tAtualizar.current = Date.now(); onAtualizar?.(); }
+        // enquanto o robô trabalha, a lista recarrega a cada ~8 s; ao terminar, uma última vez
+        if (r.rodando && Date.now() - tAtualizar.current > 8000) { tAtualizar.current = Date.now(); onAtualizar?.(); }
         if (eraRodando.current && !r.rodando) onAtualizar?.();
         eraRodando.current = r.rodando;
       }
-      timer = setTimeout(ciclo, r?.rodando ? 4000 : 20000);
+      timer = setTimeout(ciclo, r?.rodando ? 3000 : 20000);
     };
     (async () => {
-      if (automatico && !disparados.has(chave)) await pedir(false);
-      ciclo();
+      if (automatico && !(Date.now() - (pedidos.get(chave) || 0) < JANELA)) {
+        try { const r = await post('/api/foco', { ...alvo, pais, forcar }); if (vivo) { setSt(r); onEstado?.(r.rodando); } pedidos.set(chave, Date.now()); }
+        catch (e) { if (vivo) setSt({ erro: e.message }); }
+      }
+      if (vivo) ciclo();
     })();
-    return () => { vivo = false; clearTimeout(timer); };
-  }, [nicho, pais]);
-  if (!nicho || !st) return null;
-  if (st.erro) return html`<div class="foco"><span class="mut">${st.erro}</span></div>`;
+    return () => { vivo = false; clearTimeout(timer); onEstado?.(false); };
+  }, [nicho, termo, pais]);
+  if ((!nicho && !termo) || !st) return null;
+  if (st.erro) return html`<div class="foco" role="status"><span class="mut">Não deu para buscar ${nome} agora: ${st.erro}.</span></div>`;
   const ultimaLinha = (st.log || []).filter((l) => !/^\s*$/.test(l)).slice(-1)[0] || '';
-  if (st.rodando) return html`<div class="foco ao-vivo"><span class="ponto vivo"></span>
-    <div><b>Ao vivo: buscando ofertas de ${nicho} em ${nomePais(pais)}</b>
-      <div class="mut peq">${st.status === 'pendente' ? (/Na fila/.test(ultimaLinha) ? ultimaLinha : st.viva ? 'O robô já está acordado: começando…' : 'Acordando o robô na nuvem (cerca de 1 minuto)…') : ultimaLinha.trim() || 'Começando…'}</div>
-      <div class="mut peq">A lista abaixo se atualiza sozinha enquanto ele trabalha.</div></div></div>`;
-  return html`<div class="foco"><div><b>${nicho}</b> <span class="mut peq">${st.ultimaBusca ? `buscado ${relativo(st.ultimaBusca)}` : 'ainda não buscado neste país'}</span>
-      ${st.aviso && !st.iniciado ? html`<div class="mut peq">${st.aviso}</div>` : null}</div>
-    <button class="bt-p" onClick=${() => pedir(true)} disabled=${enviando}>${enviando ? 'Pedindo…' : 'Buscar de novo agora'}</button></div>`;
+  if (st.rodando) return html`<div class="foco ao-vivo" role="status"><span class="ponto vivo"></span>
+    <div><b>Buscando ${nome} agora em ${nomePais(pais)}</b>
+      <div class="mut peq">${st.status === 'pendente' ? (/Na fila/.test(ultimaLinha) ? ultimaLinha : st.viva ? 'O robô já está acordado: começando.' : 'Acordando o robô (cerca de 1 minuto).') : ultimaLinha.replace(/^[>\s]+/, '').trim() || 'Começando.'}</div>
+      <div class="mut peq">As ofertas novas aparecem abaixo sozinhas, sem recarregar.</div></div></div>`;
+  return html`<div class="foco foco-quieto" role="status"><span class="ponto"></span><span><b>${nome}</b> <span class="mut peq">${st.ultimaBusca ? `atualizado ${relativo(st.ultimaBusca)}` : 'o robô ainda não encontrou nada aqui'}</span></span></div>`;
 }
+
+// Nome antigo, usado no Início (lá a busca só roda se a última tiver mais de 6 h).
+export const FocoNicho = (p) => html`<${FocoBusca} ...${p} />`;
