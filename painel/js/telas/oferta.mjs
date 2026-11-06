@@ -2,11 +2,12 @@
 import { useState } from 'preact/hooks';
 import { html, useDados, navegar, nomePais, loja, fmt, relativo, bib, copiar, rodarTarefa, TIPOS_OFERTA, diasDesde, dataCurta } from '../base.mjs';
 import { Ocultar } from '../ui.mjs';
-import { Ic, Status, Gws, Preco, Score, Grafico, Ent, Estrela, Kpi, Esqueleto, Erro, Vazio, Abas, CartaoAnuncio, ModalModelar, Tabela, TipoTag } from '../ui.mjs';
+import { Ic, Status, Gws, Preco, Score, Grafico, Ent, Estrela, Kpi, Esqueleto, Erro, Vazio, Abas, CartaoAnuncio, ModalModelar, Tabela, TipoTag, Spark, Delta, veredito } from '../ui.mjs';
 import { Validacao } from './validacao.mjs';
 import { ModalIA } from './iamodal.mjs';
 
-const ABAS = [['geral', 'Visão geral'], ['criativos', 'Criativos'], ['funil', 'Funil'], ['pagina', 'Página e validação'], ['checkout', 'Checkout'], ['historico', 'Histórico'], ['modelar', 'Modelar']];
+// Funil e checkout ficam juntos; /oferta/:id/checkout continua valendo e abre a mesma aba.
+const ABAS = [['geral', 'Visão geral'], ['criativos', 'Criativos'], ['funil', 'Funil e checkout'], ['pagina', 'Página e validação'], ['historico', 'Histórico'], ['modelar', 'Modelar']];
 
 export function TelaOferta({ id, aba }) {
   const r = useDados('/api/pagina/' + encodeURIComponent(id), [id]);
@@ -16,30 +17,46 @@ export function TelaOferta({ id, aba }) {
   const { pagina: p, anuncios, historico, grupo, analise, checkouts } = r.dados;
   if (!p) return html`<${Vazio} titulo="Anunciante sem dados neste país" texto=${`Este anunciante não tem anúncios coletados em ${nomePais(loja.pais)}. Troque o país no topo ou abra na Biblioteca.`} acao="Voltar às ofertas" href="/ofertas" />`;
   const base = '/oferta/' + encodeURIComponent(id);
-  const contagem = { criativos: anuncios.length, checkout: checkouts.length || null };
+  const abaAtiva = aba === 'checkout' ? 'funil' : aba;
+  const contagem = { criativos: anuncios.length, funil: checkouts.length || null };
+  const v = veredito(p);
+  const sub = [p.produto, p.dominios?.[0]].filter(Boolean).join(' · ');
+  const porque = [`${fmt(p.ativos)} anúncios ativos, o mais antigo no ar há ${p.dias} dias`,
+    p.contasCheckout > 1 ? `${p.contasCheckout} contas vendendo no mesmo checkout` : null,
+    p.dupMax > 1 ? `o criativo campeão foi duplicado ${p.dupMax} vezes` : null].filter(Boolean).join(', ') + '.';
+  const serie = historico.map((h) => [h.data, h.ativos]).slice(-30);
   return html`
-    <div class="cab oferta-cab">
-      <div><div class="migalha"><a href="/ofertas">Ofertas</a> / ${p.nome}</div>
-        <div class="linha"><${Ent} img=${p.foto || p.thumb} t1=${p.nome} t2=${[p.produto, p.dominios?.[0]].filter(Boolean).join(' · ')} /><${Status} s=${p.status} /><${TipoTag} t=${p.tipo} />${p.tipo === 'marca' ? html`<span class="mut peq" title=${p.tipoMotivo}>marca grande: ${p.tipoMotivo}</span>` : null}</div></div>
-      <div class="linha"><${Ocultar} pageId=${p.page_id} nome=${p.nome} /><${Estrela} tipo="pagina" chave=${p.page_id} nome=${p.nome} on=${p.favorito} />
-        <a class="botao" href=${bib.pagina(p.page_id)} target="_blank" rel="noopener"><${Ic} n="externo" /> Biblioteca</a>
+    <div class="migalha"><a href="/ofertas">Ofertas</a><span>/</span>${p.nome}</div>
+    <div class="oferta-topo">
+      <div class="oferta-id">${p.foto || p.thumb ? html`<img src=${p.foto || p.thumb} alt="" />` : html`<div class="av"></div>`}
+        <div><h1 title=${p.nome}>${p.nome}</h1>${sub ? html`<div class="sub" title=${sub}>${sub}</div>` : null}</div></div>
+      <div class="oferta-acoes">
+        <${Estrela} tipo="pagina" chave=${p.page_id} nome=${p.nome} on=${p.favorito} /><${Ocultar} pageId=${p.page_id} nome=${p.nome} />
+        <a class="botao" href=${bib.pagina(p.page_id)} target="_blank" rel="noopener"><${Ic} n="externo" /> Ver na Biblioteca</a>
         <button class="pri" onClick=${() => navegar(base + '/modelar')}>Modelar esta oferta</button></div>
     </div>
+    <section class="veredito-oferta" aria-label="Veredito">
+      <div class="veredito-txt"><${Status} s=${p.status} />
+        <div class=${'frase ' + v.cor}>${v.frase}</div>
+        <p>${porque} ${p.motivoOport ? html`<span class="mut">${p.motivoOport}.</span>` : null}</p>
+        ${p.tipo && p.tipo !== 'low' ? html`<p class="mut peq">${p.tipo === 'marca' ? `Parece marca grande (${p.tipoMotivo}). Marcas grandes não costumam ser boas para modelar.` : `Tipo de oferta: ${TIPOS_OFERTA[p.tipo] || p.tipo}.`}</p>` : null}</div>
+      <div class="veredito-tend"><span class="mut peq">Anúncios ativos, últimos 30 dias</span>
+        <${Spark} serie=${serie} w=${300} h=${56} />
+        <div class="linha"><${Delta} v=${p.var7} /><span class="mut peq">${p.dataContagem ? 'contados ' + relativo(Date.parse(p.dataContagem + 'T12:00:00') / 1000) : ''}</span></div></div>
+    </section>
     <div class="kpis">
-      <${Kpi} rot="Anúncios ativos" val=${fmt(p.ativos)} sub=${p.dataContagem ? 'contados ' + relativo(Date.parse(p.dataContagem + 'T12:00:00') / 1000) : 'estimado'} />
-      <${Kpi} rot="Variação 7 dias" val=${p.var7 == null ? '—' : (p.var7 >= 0 ? '+' : '') + p.var7} sub=${p.var30 != null ? `30 dias: ${p.var30 >= 0 ? '+' : ''}${p.var30}` : 'precisa de mais contagens'} />
-      <${Kpi} rot="Rodando há" val=${`${p.dias} dias`} sub="anúncio ativo mais antigo" />
+      <${Kpi} rot="Anúncios ativos" val=${fmt(p.ativos)} sub=${p.var30 != null ? `${p.var30 >= 0 ? '+' : ''}${p.var30} em 30 dias` : 'primeira contagem'} />
+      <${Kpi} rot="No ar há" val=${html`${p.dias} <small>dias</small>`} sub="anúncio ativo mais antigo" />
       <${Kpi} rot="Criativo campeão" val=${`${p.dupMax}x`} sub="cópias do mesmo anúncio" />
-      <${Kpi} rot="Preço" val=${html`<${Preco} preco=${p.preco} precoBrl=${p.precoBrl} />`} sub=${p.precoOrigem ? 'lido no ' + p.precoOrigem : 'não identificado'} />
-      <${Kpi} rot="Nota" val=${p.score} sub=${`boa para modelar: ${p.oportunidade}`} />
+      <${Kpi} rot="Preço" val=${p.preco || p.precoBrl != null ? html`<${Preco} preco=${p.preco} precoBrl=${p.precoBrl} />` : html`<small>ainda não lido</small>`} sub=${p.precoOrigem ? 'lido no ' + p.precoOrigem : 'aparece após analisar o site'} />
+      <${Kpi} rot="Nota" val=${html`${p.score} <small>de 100</small>`} sub=${`para modelar: ${p.oportunidade}`} />
     </div>
-    <${Abas} abas=${ABAS.map(([k, n]) => [k, n, contagem[k]])} ativa=${aba} onTroca=${(a) => navegar(a === 'geral' ? base : base + '/' + a, { trocar: true })} />
+    <${Abas} abas=${ABAS.map(([k, n]) => [k, n, contagem[k]])} ativa=${abaAtiva} onTroca=${(a) => navegar(a === 'geral' ? base : base + '/' + a, { trocar: true })} />
     <div class="aba-corpo">
       ${aba === 'geral' ? html`<${Geral} p=${p} grupo=${grupo} historico=${historico} anuncios=${anuncios} />` : null}
       ${aba === 'criativos' ? html`<${Criativos} anuncios=${anuncios} onModelar=${setModelar} />` : null}
-      ${aba === 'funil' ? html`<${Funil} p=${p} analise=${analise} checkouts=${checkouts} />` : null}
+      ${abaAtiva === 'funil' ? html`<${Funil} p=${p} analise=${analise} checkouts=${checkouts} /><div class="secao"><div class="secao-cab"><h2>Checkouts</h2></div><${Checkouts} checkouts=${checkouts} p=${p} /></div>` : null}
       ${aba === 'pagina' ? html`<${Pagina} p=${p} analise=${analise} />` : null}
-      ${aba === 'checkout' ? html`<${Checkouts} checkouts=${checkouts} p=${p} />` : null}
       ${aba === 'historico' ? html`<${Historico} historico=${historico} anuncios=${anuncios} />` : null}
       ${aba === 'modelar' ? html`<${Modelar} p=${p} anuncios=${anuncios} analise=${analise} onModelar=${setModelar} />` : null}
     </div>
@@ -48,7 +65,7 @@ export function TelaOferta({ id, aba }) {
 
 function Geral({ p, grupo, historico, anuncios }) {
   return html`<div class="grade-2">
-    <div class="painel-box"><div class="pb-cab"><h2>Por que essa nota</h2><span class="mut peq">nota ${p.score} de 100</span></div>
+    <div class="painel-box"><div class="pb-cab"><h2>Como a nota ${p.score} foi calculada</h2><span class="mut peq">de 100</span></div>
       <div class="pb-corpo fatores">${p.fatores.map((f) => html`<div class="fator"><div class="fator-cab"><span>${f.nome}</span><b class="num">${f.pontos}<span class="mut">/${f.peso}</span></b></div>
         <i><span style=${`width:${Math.round(100 * f.nota)}%`}></span></i><small class="mut">${f.detalhe}</small></div>`)}
       <p class="peq mut" style="grid-column:1/-1;margin:4px 0 0">Boa para modelar (${p.oportunidade}): ${p.motivoOport}. Quanto menos contas usam a mesma estrutura, mais espaço há para a sua versão.</p></div></div>
@@ -58,8 +75,8 @@ function Geral({ p, grupo, historico, anuncios }) {
         ${grupo.length ? grupo.map((g) => html`<a href=${'/oferta/' + encodeURIComponent(g.page_id)} class="linha-item sem-sub"><${Ent} img=${g.foto} t1=${g.nome} t2=${g.dominio || ''} /><span class="mut peq">${g.ativos != null ? fmt(g.ativos) + ' anúncios' : ''}</span></a>`)
           : html`<span class="mut peq">Nenhuma outra página vendendo o mesmo checkout/site foi encontrada ainda.</span>`}</div></div>
       <div class="painel-box"><div class="pb-cab"><h2>Criativos campeões</h2><a class="peq" href=${'/oferta/' + encodeURIComponent(p.page_id) + '/criativos'}>Ver todos</a></div>
-        <div class="pb-corpo mini-ads">${anuncios.filter((a) => a.ativo).slice(0, 4).map((a) => html`<a href=${bib.anuncio(a.ad_id)} target="_blank" rel="noopener" class="mini-ad" title=${(a.texto || '').slice(0, 140)}>
-          ${a.thumb ? html`<img src=${a.thumb} alt="" loading="lazy" />` : html`<div class="sem-img">?</div>`}<span>${a.dup || 1}x · ${diasDesde(a.inicio) ?? '—'}d</span></a>`)}</div></div>
+        <div class="pb-corpo mini-ads">${anuncios.filter((a) => a.ativo).slice(0, 4).map((a) => html`<a href=${bib.anuncio(a.ad_id)} target="_blank" rel="noopener" class="mini-ad" title=${(a.texto || '').slice(0, 140)} aria-label=${`Criativo com ${a.dup || 1} cópias, ${diasDesde(a.inicio) ?? '?'} dias no ar`}>
+          ${a.thumb ? html`<img src=${a.thumb} alt="" loading="lazy" />` : html`<div class="sem-img">?</div>`}<span class="num">${a.dup || 1}x, ${diasDesde(a.inicio) ?? '—'} dias</span></a>`)}</div></div>
     </div></div>`;
 }
 
@@ -92,8 +109,8 @@ function Funil({ p, analise, checkouts }) {
         ${analise.cloaker?.suspeito ? html`<div class="aviso-erro" style="margin-top:10px">Possível cloaker: ${analise.cloaker.motivo}</div>` : null}</div></div></div>`}`;
 }
 
-const SemAnalise = ({ p }) => html`<div class="painel-box secao"><div class="pb-corpo"><b>O site desta oferta ainda não foi analisado.</b>
-  <p class="mut peq">O robô analisa sozinho os sites dos maiores anunciantes. Para pedir agora, clique abaixo (leva alguns minutos).</p>
+const SemAnalise = ({ p }) => html`<div class="painel-box secao"><div class="pb-corpo vazio-acao" style="padding:0"><b>O site desta oferta ainda não foi analisado</b>
+  <p class="mut">O robô analisa sozinho os sites dos maiores anunciantes. Para pedir agora, clique abaixo: leva alguns minutos.</p>
   ${p.dominios?.[0] ? html`<button class="pri" onClick=${() => rodarTarefa({ tipo: 'analisar', url: p.dominios[0], pais: loja.pais })}>Analisar ${p.dominios[0].split('/')[0]}</button>` : html`<span class="mut">Sem site identificado nos anúncios.</span>`}</div></div>`;
 
 function Pagina({ p, analise }) {
@@ -112,7 +129,7 @@ function Pagina({ p, analise }) {
 }
 
 function Checkouts({ checkouts, p }) {
-  if (!checkouts.length) return html`<${Vazio} titulo="Nenhum checkout identificado ainda" texto="O checkout aparece quando o anúncio leva direto ao gateway ou depois da análise do site." />`;
+  if (!checkouts.length) return html`<div class="painel-box"><div class="pb-corpo mut">Nenhum checkout identificado ainda. Ele aparece quando o anúncio leva direto ao gateway ou depois que o site é analisado.</div></div>`;
   return html`<div class="painel-box"><${Tabela} linhas=${checkouts} colunas=${[
     { t: 'Produto', v: (c) => html`<b>${c.produto || '—'}</b><div class="mut peq">${c.checkout}</div>` },
     { t: 'Gateway', v: (c) => html`<span class="tag tg-gw">${loja.config?.gateways?.find((g) => g.id === c.gateway)?.nome || c.gateway}</span>` },
@@ -151,8 +168,10 @@ function Modelar({ p, anuncios, analise, onModelar }) {
     ['Quiz de pré-venda', `Crie um quiz de 6 a 8 perguntas que leve ao produto [SEU PRODUTO], no estilo da oferta abaixo, com resultado personalizado e chamada para o checkout.\n\n${ref}`],
     ['Entregável e order bumps', `Sugira o entregável (formato, módulos, bônus) de um produto low ticket para concorrer com a oferta abaixo, mais 4 a 6 order bumps coerentes e um upsell.\n\n${ref}`],
   ];
-  return html`<div class="dica">Modelar é criar a sua versão a partir do que funciona: mesma lógica, outra promessa, outro texto, outro criativo. Copie um prompt e cole no ChatGPT, Claude ou Gemini.</div>
-    ${campeao ? html`<div class="linha" style="margin-bottom:12px"><button class="pri" onClick=${() => onModelar(campeao)}>Analisar o criativo campeão com IA e criar hooks, roteiros e copies</button></div>` : null}
+  return html`<div class="hoje-acao" style="margin-bottom:16px"><h2>Crie a sua versão desta oferta</h2>
+      <p>Modelar é usar a lógica que funciona com outra promessa, outro texto e outro criativo. Comece pelo criativo campeão ou copie um dos prompts abaixo e cole no ChatGPT, Claude ou Gemini.</p>
+      <div class="linha">${campeao ? html`<button class="pri" onClick=${() => onModelar(campeao)}>Modelar o criativo campeão</button>` : null}
+        <a class="botao" href="/editor">Abrir o editor de criativo</a><a class="botao" href="/paginas">Criar página ou quiz</a></div></div>
     <div class="grade-2">${prompts.map(([t, txt]) => html`<div class="painel-box"><div class="pb-cab"><b>${t}</b><button class="bt-p" onClick=${() => copiar(txt)}><${Ic} n="copiar" /> Copiar</button></div>
       <div class="pb-corpo"><pre class="prompt">${txt}</pre></div></div>`)}</div>`;
 }
