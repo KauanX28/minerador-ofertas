@@ -20,16 +20,24 @@ const ORDENS = {
   crescimento: (a, b) => (b.var7 ?? b.crescimento ?? -1e9) - (a.var7 ?? a.crescimento ?? -1e9), novos: (a, b) => a.dias - b.dias || b.score - a.score,
   dias: (a, b) => b.dias - a.dias, preco: (a, b) => (a.precoBrl ?? 1e9) - (b.precoBrl ?? 1e9),
 };
+// Busca por palavras: todas precisam aparecer, em qualquer ordem, sem ligar para acento, maiúscula ou plural
+// ("atividades biblicas" acha "Atividades bíblicas" e "+100 atividades para a escola bíblica").
+const PARADA_BUSCA = new Set('de da do das dos para com em e a o as os um uma no na nos nas por pra'.split(' '));
+const semAcentoBusca = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+export function termosBusca(t) {
+  const ws = semAcentoBusca(t).split(/[^a-z0-9$]+/).filter((w) => w.length >= 2 && !PARADA_BUSCA.has(w)).map((w) => (w.length > 4 && w.endsWith('s') ? w.slice(0, -1) : w));
+  return ws.length ? ws : semAcentoBusca(t).trim() ? [semAcentoBusca(t).trim()] : [];
+}
 function filtrarRanking(lista, q) {
   const sim = (v) => v === '1' || v === 'true';
   const semAcento = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  const busca = semAcento(q.busca);
+  const termos = termosBusca(q.busca);
   const nichos = String(q.nichos || '').split('|').filter(Boolean);
   const verMarcas = q.marcas === '1' || String(q.tipo || '').split(',').includes('marca');
   let r = lista.filter((x) => (verMarcas || x.tipo !== 'marca') && (!nichos.length || nichos.some((n) => (x.nichos || []).includes(n))) && (!q.status || x.status === q.status) && (!q.funil || x.funil === q.funil) && (!q.formato || x.formato === q.formato)
     && (!sim(q.vsl) || x.temVsl) && (!sim(q.quiz) || x.temQuiz) && (!sim(q.checkout) || x.checkoutConhecido) && (!sim(q.plr) || x.plr)
     && (!sim(q.acelerando) || ['Nova acelerando', 'Escalando agora'].includes(x.status)) && (!sim(q.gringa) || x.semEquivalenteBR)
-    && (!busca || semAcento([x.nome, x.produto, x.titulo, x.texto, ...(x.dominios || [])].join(' ')).includes(busca)));
+    && (!termos.length || ((h) => termos.every((w) => h.includes(w)))(semAcento([x.nome, x.produto, x.titulo, x.texto, ...(x.dominios || [])].join(' ')))));
   if (q.ordem === 'oportunidade') r = r.filter(recomendavel);
   r = r.sort(q.ordem === 'oportunidade' ? (a, b) => notaRecomendacao(b) - notaRecomendacao(a) : ORDENS[q.ordem] || ORDENS.score);
   if (q.ids) { const ids = String(q.ids).split(','); r = lista.filter((x) => ids.includes(x.page_id)); }
@@ -413,8 +421,10 @@ Dados: ${JSON.stringify(dados).slice(0, 6000)}`;
       if (q.texto) {
         // Sem acento no Postgres ("biblico" acha "bíblico"); no modo local, comparação simples.
         const sa = (c) => (usaPostgres ? `translate(LOWER(${c}), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc')` : `LOWER(${c})`);
-        filtros.push(`(${sa('texto')} LIKE ? OR ${sa('titulo')} LIKE ? OR ${sa('page_name')} LIKE ?)`);
-        const t = `%${String(q.texto).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')}%`; p.push(t, t, t);
+        for (const w of termosBusca(q.texto)) {
+          filtros.push(`(${sa('texto')} LIKE ? OR ${sa('titulo')} LIKE ? OR ${sa('page_name')} LIKE ?)`);
+          p.push(`%${w}%`, `%${w}%`, `%${w}%`);
+        }
       }
       if (q.formato) { filtros.push('formato = ?'); p.push(q.formato); }
       if (q.dup) { filtros.push('dup >= ?'); p.push(Number(q.dup)); }
