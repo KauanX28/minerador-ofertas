@@ -54,7 +54,7 @@ export function TelaSite({ dominio }) {
         <dt>VSL</dt><dd>${(t.vsl || []).join(', ') || '—'}</dd><dt>Quiz</dt><dd>${(t.quiz || []).join(', ') || '—'}</dd><dt>Rastreamento</dt><dd>${(t.rastreio || []).join(', ') || '—'}</dd>
         <dt>Construtor</dt><dd>${(t.construtor || []).join(', ') || '—'}</dd><dt>Palavras</dt><dd>${fmt(a.palavras)}</dd></dl></div></div>
       <div class="painel-box"><div class="pb-cab"><h2>Gatilhos</h2></div><div class="pb-corpo">
-        ${[['temGarantia', 'Garantia'], ['temBonus', 'Bônus'], ['temDepoimentos', 'Depoimentos / prova social'], ['temEscassez', 'Escassez / urgência']].map(([k, n]) => html`<div class="check"><span class=${a[k] ? 'sim' : 'nao'}>${a[k] ? '✓' : '–'}</span>${n}</div>`)}</div></div>
+        ${[['temGarantia', 'Garantia'], ['temBonus', 'Bônus'], ['temDepoimentos', 'Depoimentos / prova social'], ['temEscassez', 'Escassez / urgência']].map(([k, n]) => html`<div class="check"><span class=${a[k] ? 'sim' : 'nao'} aria-label=${a[k] ? 'tem' : 'não tem'}>${a[k] ? html`<${Ic} n="check" t=${11} />` : '–'}</span>${n}</div>`)}</div></div>
     </div>
     ${a.biblioteca?.paginas?.length ? html`<div class="secao"><div class="secao-cab"><h2>Páginas que anunciam o site</h2></div><div class="painel-box"><${Tabela} linhas=${a.biblioteca.paginas} colunas=${[
       { t: 'Página', v: (p) => html`<a href=${'/oferta/' + encodeURIComponent(p.page_id)}>${p.nome}</a>` }, { t: 'Anúncios vistos', cl: 'dir', v: (p) => fmt(p.anuncios) },

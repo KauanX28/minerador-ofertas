@@ -134,7 +134,7 @@ function Conteudo({ d, titulo, mudar, ia, ocupado }) {
   const c = caps[Math.min(i, caps.length - 1)];
   const escrever = () => ia('capitulo', { capitulo: c }, (r) => r?.html && mudar({ capitulos: caps.map((x, j) => (j === i ? { ...x, html: r.html } : x)) }));
   return html`<div class="conteudo-ent">
-    <div class="nichos-lista">${caps.map((x, j) => html`<button class=${j === i ? 'ativo' : ''} onClick=${() => setI(j)}>${j + 1}. ${x.titulo}<small class=${x.html ? 'cresce' : 'mut'}>${x.html ? '✓' : '—'}</small></button>`)}</div>
+    <div class="nichos-lista">${caps.map((x, j) => html`<button class=${j === i ? 'ativo' : ''} onClick=${() => setI(j)}>${j + 1}. ${x.titulo}<small class=${x.html ? 'cresce' : 'mut'}>${x.html ? 'escrito' : 'a escrever'}</small></button>`)}</div>
     <div class="col-gap"><div class="linha" style="justify-content:space-between"><b>${c.titulo}</b>
       <button onClick=${escrever} disabled=${!!ocupado}>${ocupado === 'capitulo' ? 'Escrevendo…' : c.html ? 'Reescrever com IA' : 'Escrever com IA'}</button></div>
       <${EditorRico} key=${i} valor=${c.html} onMudar=${(h) => mudar({ capitulos: caps.map((x, j) => (j === i ? { ...x, html: h } : x)) })} /></div></div>`;

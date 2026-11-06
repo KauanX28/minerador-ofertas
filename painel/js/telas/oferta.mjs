@@ -105,7 +105,7 @@ function Funil({ p, analise, checkouts }) {
         <dt>VSL</dt><dd>${(t.vsl || []).join(', ') || '—'}</dd><dt>Quiz</dt><dd>${(t.quiz || []).join(', ') || '—'}</dd>
         <dt>Rastreamento</dt><dd>${(t.rastreio || []).join(', ') || '—'}</dd><dt>Construtor</dt><dd>${(t.construtor || []).join(', ') || '—'}</dd></dl></div></div>
       <div class="painel-box"><div class="pb-cab"><h2>Gatilhos na página</h2></div><div class="pb-corpo">
-        ${[['temGarantia', 'Garantia'], ['temBonus', 'Bônus'], ['temDepoimentos', 'Depoimentos / prova social'], ['temEscassez', 'Escassez / urgência']].map(([k, n]) => html`<div class="check"><span class=${analise[k] ? 'sim' : 'nao'}>${analise[k] ? '✓' : '–'}</span>${n}</div>`)}
+        ${[['temGarantia', 'Garantia'], ['temBonus', 'Bônus'], ['temDepoimentos', 'Depoimentos / prova social'], ['temEscassez', 'Escassez / urgência']].map(([k, n]) => html`<div class="check"><span class=${analise[k] ? 'sim' : 'nao'} aria-label=${analise[k] ? 'tem' : 'não tem'}>${analise[k] ? html`<${Ic} n="check" t=${11} />` : '–'}</span>${n}</div>`)}
         ${analise.cloaker?.suspeito ? html`<div class="aviso-erro" style="margin-top:10px">Possível cloaker: ${analise.cloaker.motivo}</div>` : null}</div></div></div>`}`;
 }
 

@@ -183,7 +183,7 @@ export function CartaoOferta({ p, selecionado, onSelecionar }) {
           <div><b>${p.dias ?? '—'}</b><span>dias</span></div>
           <div><b>${p.dupMax ?? 1}x</b><span>variações</span></div>
         </div>
-        <div class="card-tend"><${Spark} serie=${p.serie} /><${Delta} v=${p.var7} /></div>
+        ${p.serie?.length > 1 || p.var7 != null ? html`<div class="card-tend"><${Spark} serie=${p.serie} /><${Delta} v=${p.var7} /></div>` : null}
         ${temPreco || p.gateways?.length ? html`<div class="card-meta">
           ${temPreco ? html`<${Preco} preco=${p.preco} precoBrl=${p.precoBrl} />` : null}
           ${temPreco && p.gateways?.length ? html`<span class="sep"></span>` : null}

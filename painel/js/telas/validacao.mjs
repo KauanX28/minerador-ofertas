@@ -42,7 +42,7 @@ export function Validacao({ dominio, nome }) {
   return html`<div class="validacao">
     <div class="painel-box veredito"><div class="pb-cab"><h2>Validação de ${v.host}</h2>
       <div class="linha"><span class="mut peq">${relativo(v.quando)}</span><button class="bt-p" onClick=${validar} disabled=${rodando}>${rodando ? 'Validando…' : 'Validar de novo'}</button></div></div>
-      <div class="pb-corpo">${bons.map((b) => html`<div class="check"><span class="sim">✓</span>${b}</div>`)}${alertas.map((a) => html`<div class="check"><span class="nao">!</span>${a}</div>`)}
+      <div class="pb-corpo">${bons.map((b) => html`<div class="check"><span class="sim" aria-label="ponto a favor"><${Ic} n="check" t=${11} /></span>${b}</div>`)}${alertas.map((a) => html`<div class="check"><span class="nao" aria-label="atenção">!</span>${a}</div>`)}
         ${!bons.length && !alertas.length ? html`<span class="mut">Poucos sinais públicos ainda. Domínios novos só de anúncio costumam aparecer assim.</span>` : null}</div></div>
     <div class="grade-3">
       <div class="painel-box"><div class="pb-cab"><h2>Tráfego real</h2><span class="mut peq">Chrome UX Report</span></div><div class="pb-corpo">
