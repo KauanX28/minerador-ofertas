@@ -36,6 +36,7 @@ const MENU = [
 ];
 // Telas de cada seção que viram abas no topo da seção.
 const SECOES = [
+  { teste: /^\/(criativos|referencias)$/, nome: 'Criativos', itens: [['/criativos', 'Biblioteca'], ['/criativos?modo=significado', 'Por significado'], ['/criativos?modo=padroes', 'Padrões vencedores'], ['/referencias', 'Salvos']] },
   { teste: /^\/(sites|gateways)$/, nome: 'Validar', itens: [['/sites', 'Análise de site'], ['/gateways', 'Gateways']] },
   { teste: /^\/(prompts|editor|video|paginas|entregavel)$/, nome: 'Estúdio', itens: [['/prompts', 'Prompts'], ['/editor', 'Criativo'], ['/video', 'Vídeo'], ['/paginas', 'Página e quiz'], ['/entregavel', 'Entregável']] },
   { teste: /^\/(calculadoras|escalar)$/, nome: 'Escalar', itens: [['/calculadoras', 'Calculadoras e plano'], ['/escalar', 'Anúncios e vendas']] },
@@ -212,10 +213,11 @@ function BotaoTema() {
 }
 
 // Abas de uma seção (Validar, Estúdio, Escalar): cada aba é um endereço próprio.
-function AbasSecao({ caminho }) {
+function AbasSecao({ caminho, busca }) {
   const s = SECOES.find((x) => x.teste.test(caminho));
   if (!s) return null;
-  return html`<nav class="subnav" aria-label=${s.nome}>${s.itens.map(([href, nome]) => html`<a href=${href} class=${caminho === href ? 'ativo' : ''} aria-current=${caminho === href ? 'page' : null}>${nome}</a>`)}</nav>`;
+  const atual = caminho + (busca.get('modo') ? '?modo=' + busca.get('modo') : '');
+  return html`<nav class="subnav" aria-label=${s.nome}>${s.itens.map(([href, nome]) => html`<a href=${href} class=${atual === href ? 'ativo' : ''} aria-current=${atual === href ? 'page' : null}>${nome}</a>`)}</nav>`;
 }
 
 // "Como usar": só o trecho do Método que vale para a tela aberta.
@@ -247,7 +249,7 @@ function Limite({ children }) {
 
 function Painel() {
   const l = useLoja();
-  const { caminho } = useRota();
+  const { caminho, busca } = useRota();
   const [mais, setMais] = useState(false), [ajuda, setAjuda] = useState(false);
   useEffect(() => { if (l.perfil && !l.perfil.concluido && caminho !== '/boas-vindas') navegar('/boas-vindas', { trocar: true }); }, [l.perfil, caminho]);
   useEffect(() => { if (ATALHOS[caminho]) navegar(ATALHOS[caminho] + location.search, { trocar: true }); }, [caminho]);
@@ -263,7 +265,7 @@ function Painel() {
           <${AcaoRobo} /><${SeletorPais} /><${BotaoTema} /><span class="so-desktop"><${Conta} onAjuda=${() => setAjuda(true)} /></span>
         </div>
       </header>
-      <main id="conteudo" key=${l.pais}><${AbasSecao} caminho=${caminho} /><${Limite} key=${caminho.split('/').slice(0, 3).join('/')}>${tela}</${Limite}></main>
+      <main id="conteudo" key=${l.pais}><${AbasSecao} caminho=${caminho} busca=${busca} /><${Limite} key=${caminho.split('/').slice(0, 3).join('/')}>${tela}</${Limite}></main>
     </div>
     <${BarraInferior} caminho=${caminho} onMais=${() => setMais(true)} />
     ${mais ? html`<${Folha} titulo="Mais" onFechar=${() => setMais(false)}><nav class="conta-menu em-folha" aria-label="Mais opções">

@@ -14,15 +14,15 @@ export function TelaReferencias() {
   if (!favs) return html`<${Esqueleto} cards=${6} />`;
   const pastas = [...new Set(favs.map((f) => f.pasta).filter(Boolean))], tags = [...new Set(favs.flatMap(tagsDe))];
   const vis = favs.filter((f) => (!pasta || f.pasta === pasta) && (!tag || tagsDe(f).includes(tag)));
-  return html`<div class="cab"><div><h1>Referências</h1><p>Criativos que você salvou para estudar e modelar. Organize por pasta e tag.</p></div>
+  return html`<div class="cab"><div><h1>Criativos salvos</h1><p>Os criativos que você salvou com a estrela, para estudar e modelar. Organize por pasta e tag.</p></div>
       <div class="linha"><select value=${pasta} onChange=${(e) => setPasta(e.target.value)} aria-label="Pasta"><option value="">Todas as pastas</option>${pastas.map((p) => html`<option>${p}</option>`)}</select>
         <select value=${tag} onChange=${(e) => setTag(e.target.value)} aria-label="Tag"><option value="">Todas as tags</option>${tags.map((t) => html`<option>${t}</option>`)}</select></div></div>
-    ${!favs.length ? html`<${Vazio} titulo="Nenhuma referência salva" texto="Clique na estrela de qualquer criativo (em Criativos ou na página de uma oferta) para guardar aqui." acao="Ver criativos" href="/criativos" />`
+    ${!favs.length ? html`<${Vazio} titulo="Nenhum criativo salvo ainda" texto="Toque na estrela de qualquer criativo, aqui na Biblioteca ou na página de uma oferta, para guardar nesta lista." acao="Abrir a biblioteca de criativos" href="/criativos" />`
       : html`<div class="ads">${vis.map((f) => html`<div class="ref">
-          ${f.anuncio ? html`<${CartaoAnuncio} a=${f.anuncio} onModelar=${setModelar} />` : html`<div class="painel-box vazio peq">Anúncio removido da base (mais de 60 dias inativo).</div>`}
+          ${f.anuncio ? html`<${CartaoAnuncio} a=${f.anuncio} onModelar=${setModelar} />` : html`<div class="painel-box vazio peq">Este anúncio saiu da base: ficou mais de 60 dias fora do ar.</div>`}
           <div class="ref-rod"><span class="peq">${f.pasta ? html`<b>${f.pasta}</b> · ` : ''}${tagsDe(f).join(', ')}</span>${f.nota ? html`<span class="peq mut">${f.nota}</span>` : null}
             <div class="linha"><button class="bt-p" onClick=${() => setEditar(f)}>Pasta, tags e nota</button>
-              <button class="bt-ic" title="Remover" onClick=${async () => { await post('/api/favoritos', { tipo: 'criativo', chave: f.chave, remover: true }); carregar(); }}><${Ic} n="fechar" /></button></div></div></div>`)}</div>`}
+              <button class="bt-ic" title="Tirar dos salvos" aria-label="Tirar dos salvos" onClick=${async () => { await post('/api/favoritos', { tipo: 'criativo', chave: f.chave, remover: true }); carregar(); }}><${Ic} n="fechar" /></button></div></div></div>`)}</div>`}
     ${editar ? html`<${EditarRef} f=${editar} pastas=${pastas} onFechar=${() => setEditar(null)} onSalvo=${() => { setEditar(null); carregar(); }} />` : null}
     ${modelar ? html`<${ModalIA} ad=${modelar} onFechar=${() => setModelar(null)} />` : null}`;
 }
@@ -49,12 +49,12 @@ export function PadroesVencedores() {
   const resumir = async () => { setGerando(true); try { setResumo(await resolver(await post('/api/padroes/resumo', { nicho }))); } catch (e) { aviso(e.message); } setGerando(false); };
   const barra = (lista) => { const max = Math.max(1, ...lista.map((x) => x[1])); return html`${lista.map(([k, v]) => html`<div class="barra-h"><span>${k}</span><i><b style=${`width:${(100 * v) / max}%`}></b></i><small class="mut">${fmt(v)}</small></div>`)}`; };
   return html`<div class="barra-filtros"><select value=${nicho} onChange=${(e) => setNicho(e.target.value)} aria-label="Nicho"><option value="">Todos os nichos</option>${Object.keys(l.config?.nichos || {}).map((n) => html`<option>${n}</option>`)}</select>
-      <span class="mut peq">${nomePais(l.pais)} · ${d ? fmt(d.total) + ' criativos ativos analisados' : ''}${d?.idadeMediaTop ? ` · os 20 mais duplicados estão no ar há ${d.idadeMediaTop} dias em média` : ''}</span></div>
-    ${r.erro ? html`<${Erro} msg=${r.erro} />` : r.carregando ? html`<${Esqueleto} />` : !d.total ? html`<${Vazio} titulo="Sem criativos deste nicho ainda" texto="O robô coleta o nicho no próximo rodízio." />` : html`
+      <span class="mut peq">${d ? fmt(d.total) + ' criativos ativos analisados' : ''}${d?.idadeMediaTop ? `; os 20 mais duplicados estão no ar há ${d.idadeMediaTop} dias em média` : ''}</span></div>
+    ${r.erro ? html`<${Erro} msg=${r.erro} />` : r.carregando ? html`<${Esqueleto} />` : !d.total ? html`<${Vazio} titulo="Sem criativos deste nicho ainda" texto="O robô coleta este nicho na próxima rodada. Enquanto isso, veja os padrões de todos os nichos." acao="Ver todos os nichos" onAcao=${() => setNicho('')} />` : html`
     <div class="painel-box"><div class="pb-cab"><h2>Resumo da semana</h2>${!res ? html`<button class="bt-p" onClick=${resumir} disabled=${gerando}>${gerando ? 'Gerando…' : 'Resumir com IA'}</button>` : null}</div><div class="pb-corpo">
       ${res ? html`<p style="margin-top:0">${res.resumo}</p>${res.estruturas_de_hook?.length ? html`<b class="peq">Fórmulas de hook</b><ol class="lista-ia">${res.estruturas_de_hook.map((h) => html`<li>${h} <button class="bt-ic" onClick=${() => copiar(h)}><${Ic} n="copiar" /></button></li>`)}</ol>` : null}
         ${res.o_que_testar?.length ? html`<b class="peq">O que testar</b><ul class="lista-ia">${res.o_que_testar.map((x) => html`<li>${x}</li>`)}</ul>` : null}`
-        : resumo?.semIA ? html`<p class="mut peq">Sem IA configurada. Copie o prompt:</p><button class="bt-p" onClick=${() => copiar(resumo.prompt)}><${Ic} n="copiar" /> Copiar prompt</button>`
+        : resumo?.semIA ? html`<p class="mut peq">Copie o prompt e cole no ChatGPT, Claude ou Gemini para gerar o resumo:</p><button class="bt-p" onClick=${() => copiar(resumo.prompt)}><${Ic} n="copiar" /> Copiar prompt</button>`
         : html`<span class="mut peq">A IA resume os padrões abaixo em fórmulas prontas (uma vez por semana, fica salvo).</span>`}</div></div>
     <div class="grade-2 secao">
       <div class="painel-box"><div class="pb-cab"><h2>Hooks dos criativos mais duplicados</h2></div><div class="pb-corpo">

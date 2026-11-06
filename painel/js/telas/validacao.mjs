@@ -36,8 +36,8 @@ export function Validacao({ dominio, nome }) {
   const externos = [['Google Trends', `https://trends.google.com/trends/explore?geo=${loja.pais}&q=${termo}`], ['Reclame Aqui', `https://www.reclameaqui.com.br/busca/?q=${termo}`],
     ['Google Ads Transparency', `https://adstransparency.google.com/?region=${loja.pais}&domain=${host}`], ['TikTok Ads', `https://library.tiktok.com/ads?region=all&adv_name=${termo}`],
     ['PageSpeed', `https://pagespeed.web.dev/analysis?url=https://${host}`]];
-  if (v === undefined || (rodando && !v)) return html`<div class="painel-box"><div class="pb-corpo"><b>Validando ${host}…</b><p class="mut peq">Consultando Chrome UX Report, Wayback Machine, RDAP, certificados e Tranco (de 5 a 40 segundos).</p></div></div>`;
-  if (!v) return html`<div class="painel-box"><div class="pb-corpo"><b>Validação indisponível</b><p class="mut peq">${erro}</p><button onClick=${validar}>Tentar de novo</button></div></div>`;
+  if (v === undefined || (rodando && !v)) return html`<div class="painel-box"><div class="pb-corpo"><b>Validando ${host}…</b><p class="mut peq">Consultando fontes públicas: tráfego medido pelo Chrome, histórico no Wayback Machine, idade do domínio e ranking de acessos. Leva de 5 a 40 segundos.</p></div></div>`;
+  if (!v) return html`<div class="painel-box"><div class="pb-corpo"><b>A validação não respondeu</b><p class="mut peq">${erro || 'Uma das fontes públicas está fora do ar.'} Tente de novo em alguns minutos.</p><button onClick=${validar}>Validar de novo</button></div></div>`;
   const { bons, alertas } = veredito(v);
   return html`<div class="validacao">
     <div class="painel-box veredito"><div class="pb-cab"><h2>Validação de ${v.host}</h2>
@@ -46,7 +46,7 @@ export function Validacao({ dominio, nome }) {
         ${!bons.length && !alertas.length ? html`<span class="mut">Poucos sinais públicos ainda. Domínios novos só de anúncio costumam aparecer assim.</span>` : null}</div></div>
     <div class="grade-3">
       <div class="painel-box"><div class="pb-cab"><h2>Tráfego real</h2><span class="mut peq">Chrome UX Report</span></div><div class="pb-corpo">
-        ${v.crux?.semChave ? html`<p class="mut peq" style="margin:0">Para ver se o site tem tráfego real (e as métricas de velocidade), configure uma chave grátis do Google em <code>GOOGLE_API_KEY</code> (veja o README).</p>`
+        ${v.crux?.semChave ? html`<p class="mut peq" style="margin:0">A medição de tráfego real ainda não está ligada neste painel. Ela usa uma chave grátis do Google que o responsável pelo painel ativa uma vez (o passo a passo está no guia de instalação).</p>`
           : v.crux?.trafego ? html`<div class="res cresce">Detectável</div><dl class="lista-def peq"><dt>Carregamento (LCP)</dt><dd>${ms(v.crux.lcp)}</dd><dt>Resposta ao toque (INP)</dt><dd>${ms(v.crux.inp)}</dd><dt>Estabilidade (CLS)</dt><dd>${v.crux.cls ?? '—'}</dd></dl>`
           : v.crux ? html`<div class="res">Não detectável</div><p class="mut peq">Menos visitas que o mínimo do Chrome. Funil que vive só de anúncio costuma ficar assim.</p>` : html`<span class="mut">${v.erros?.crux || '—'}</span>`}
         ${v.pagespeed?.nota != null ? html`<p class="peq">Nota de velocidade no celular: <b>${v.pagespeed.nota}</b>/100</p>` : null}</div></div>

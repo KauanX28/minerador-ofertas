@@ -11,7 +11,7 @@ export function TelaSites() {
   return html`<div class="cab"><div><h1>Análise de site</h1><p>Cole o link da página de vendas ou do checkout. O robô abre como celular, segue os redirecionamentos e mostra o funil.</p></div></div>
     <form class="painel-box form-linha" onSubmit=${(e) => { e.preventDefault(); const u = url.trim(); if (!u) return; navegar('/site/' + encodeURIComponent(u.replace(/^https?:\/\//, '').split('/')[0])); }}>
       <input value=${url} onInput=${(e) => setUrl(e.target.value)} placeholder="https://pagina-de-vendas.com ou link de checkout" aria-label="Endereço do site" />
-      <button class="pri" type="submit">Ver análise</button></form>
+      <button class="pri" type="submit">Analisar site</button></form>
     <div class="secao"><div class="secao-cab"><h2>Sites já analisados</h2><span class="mut peq">${r.dados?.length ?? ''}</span></div>
       ${r.erro ? html`<${Erro} msg=${r.erro} />` : r.carregando ? html`<${Esqueleto} />` : html`<div class="painel-box"><${Tabela} linhas=${r.dados} colunas=${[
         { t: 'Site', v: (a) => html`<a href=${'/site/' + encodeURIComponent(a.dominio)} class="sem-sub"><${Ent} img=${a.imagem} t1=${a.dominio} t2=${a.titulo} /></a>` },
@@ -28,13 +28,13 @@ export function TelaSite({ dominio }) {
   const { dados: a, links } = r.dados;
   const atalhos = html`<div class="linha">${Object.entries(links || {}).map(([n, u]) => html`<a class="botao" href=${u} target="_blank" rel="noopener">${n} <${Ic} n="externo" t=${12} /></a>`)}</div>`;
   const analisar = () => rodarTarefa({ tipo: 'analisar', url: dominio, pais: l.pais });
-  if (!a) return html`<div class="cab"><div><div class="migalha"><a href="/sites">Sites</a> / ${dominio}</div><h1>${dominio}</h1></div></div>
+  if (!a) return html`<div class="cab"><div><div class="migalha"><a href="/sites">Análise de site</a><span>/</span>${dominio}</div><h1>${dominio}</h1></div></div>
     <div class="secao"><${Validacao} dominio=${dominio} /></div>
-    <${Vazio} titulo="Este site ainda não foi analisado" texto=${`A análise abre a página como celular, identifica gateway, checkout, preço, VSL, quiz, rastreadores e cloaker, lê o sitemap.xml e conta os anúncios que levam ao site (${l.pais}).`} acao="Analisar agora" onAcao=${analisar} />
+    <${Vazio} titulo="Este site ainda não foi analisado" texto=${`A análise abre a página como celular e mostra gateway, checkout, preço, VSL, quiz, rastreadores e se há cloaker. Também conta os anúncios que levam ao site em ${l.pais}. Leva alguns minutos.`} acao="Analisar este site agora" onAcao=${analisar} />
     <div class="secao"><div class="secao-cab"><h2>Ferramentas externas</h2></div>${atalhos}</div>`;
   const t = a.tecnologia || {};
   return html`
-    <div class="cab"><div><div class="migalha"><a href="/sites">Sites</a> / ${a.dominio}</div><h1>${a.dominio}</h1><p>analisado ${relativo(a.quando)}</p></div>
+    <div class="cab"><div><div class="migalha"><a href="/sites">Análise de site</a><span>/</span>${a.dominio}</div><h1>${a.dominio}</h1><p>analisado ${relativo(a.quando)}</p></div>
       <div class="linha"><${Estrela} tipo="oferta" chave=${a.dominio} nome=${a.dominio} /><button onClick=${analisar}>Refazer análise</button>
         ${a.urlFinal ? html`<a class="botao" href=${a.urlFinal} target="_blank" rel="noopener">Abrir site <${Ic} n="externo" /></a>` : null}</div></div>
     <div class="kpis"><${Kpi} rot="Anúncios para o site" val=${fmt(a.biblioteca?.total)} sub="na Biblioteca" />

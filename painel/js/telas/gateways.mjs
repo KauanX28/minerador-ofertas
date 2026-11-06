@@ -14,9 +14,9 @@ export function TelaGateways() {
     { t: 'Anúncios na Biblioteca', cl: 'dir', v: (g) => (g.totalBiblioteca != null ? html`<b class="num">${fmt(g.totalBiblioteca)}</b>` : html`<span class="mut">ainda não pesquisado</span>`) },
     { t: 'Checkouts', cl: 'dir', v: (g) => fmt(g.checkouts) }, { t: 'Anunciantes', cl: 'dir', v: (g) => fmt(g.paginas) },
     { t: 'Atualizado', cl: 'dir', v: (g) => html`<span class="peq mut">${relativo(g.consultado)}</span>` },
-    { t: '', cl: 'acoes', v: (g) => html`<a class="botao" href=${'/gateways/' + g.id}>Ver ofertas</a>` },
+    { t: '', cl: 'acoes', v: (g) => html`<a class="bt-p" href=${'/gateways/' + g.id} aria-label=${'Ver ofertas de ' + g.nome}>Ver ofertas</a>` },
   ]} /></div>`;
-  return html`<div class="cab"><div><h1>Gateways</h1><p>${nomePais(l.pais)} · pesquise um gateway e veja os checkouts com mais anúncios. Dica: cole um link de checkout na busca do topo.</p></div></div>
+  return html`<div class="cab"><div><h1>Gateways</h1><p>${nomePais(l.pais)}: escolha um gateway e veja os checkouts com mais anúncios. Também dá para colar um link de checkout na busca do topo.</p></div></div>
     <div class="secao-cab"><h2>Brasil e América Latina</h2></div>${tab(r.dados.filter((g) => regiao('BR').includes(g.id)))}
     <div class="secao"><div class="secao-cab"><h2>Internacional</h2><span class="mut peq">use com países como US, GB, CA, AU</span></div>${tab(r.dados.filter((g) => regiao('INT').includes(g.id)))}</div>`;
 }
@@ -31,10 +31,10 @@ export function TelaGateway({ id }) {
   if (!g) return html`<${Vazio} titulo="Gateway não encontrado" acao="Ver gateways" href="/gateways" />`;
   const pesquisar = () => rodarTarefa({ tipo: 'gateway', gateway: id, pais: l.pais });
   return html`
-    <div class="cab"><div><div class="migalha"><a href="/gateways">Gateways</a> / ${g.nome}</div><h1>${g.nome}</h1><p>${nomePais(l.pais)} · busca na Biblioteca por ${g.busca.map((b) => html`<code>${b}</code> `)}</p></div>
+    <div class="cab"><div><div class="migalha"><a href="/gateways">Gateways</a><span>/</span>${g.nome}</div><h1>${g.nome}</h1><p>${nomePais(l.pais)}: o robô procura na Biblioteca por ${g.busca.join(', ')}.</p></div>
       <div class="linha"><button onClick=${() => exportarCSV('checkouts-' + id, d.checkouts, [['Produto', (c) => c.produto], ['Checkout', (c) => c.url], ['Preço', (c) => c.preco], ['Variações', (c) => c.variacoes],
         ['Criativos', (c) => c.anuncios], ['Dias', (c) => c.dias], ['Anunciantes', (c) => c.paginas.map((p) => p.nome).join(' | ')], ['Nota', (c) => c.score]])}>CSV</button>
-        <button class="pri" onClick=${pesquisar}>Pesquisar agora</button></div></div>
+        <button class="pri" onClick=${pesquisar}>Pesquisar ${g.nome} agora</button></div></div>
     <div class="kpis"><${Kpi} rot="Anúncios na Biblioteca" val=${fmt(d.buscas[0]?.total)} sub=${d.buscas[0] ? relativo(d.buscas[0].quando) : 'não pesquisado'} />
       <${Kpi} rot="Checkouts mapeados" val=${fmt(d.checkouts.length)} /><${Kpi} rot="Anúncios coletados" val=${fmt(d.checkouts.reduce((s, c) => s + c.anuncios, 0))} />
       <${Kpi} rot="Páginas de vendas" val=${fmt(d.paginasVendas.length)} sub="sites que levam ao gateway" /></div>
