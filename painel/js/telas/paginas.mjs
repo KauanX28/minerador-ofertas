@@ -48,9 +48,10 @@ export function TelaPaginas() {
   const novo = async (tipo) => { const r = await post('/api/projetos', { tipo, titulo: tipo === 'quiz' ? 'Novo quiz' : 'Nova página', dados: { cor: tipo === 'quiz' ? '#7c3aed' : '#16a34a' } }); navegar('/paginas/' + r.id); };
   if (!lista) return html`<${Esqueleto} />`;
   return html`<div class="cab"><div><h1>Página e quiz</h1><p>A IA usa só a estrutura da página de referência (ordem das seções e gatilhos) e escreve tudo novo. Exporte em HTML e hospede onde quiser.</p></div>
-      <div class="linha"><button onClick=${() => novo('quiz')}><${Ic} n="mais" /> Novo quiz</button><button class="pri" onClick=${() => novo('pagina')}><${Ic} n="mais" /> Nova página</button></div></div>
+      ${lista.length ? html`<div class="linha"><button onClick=${() => novo('quiz')}>Criar quiz</button><button class="pri" onClick=${() => novo('pagina')}>Criar página de vendas</button></div>` : null}</div>
     ${lista.length ? html`<div class="grade-3">${lista.map((p) => html`<a class="painel-box passo" href=${'/paginas/' + p.id}><div><b>${p.titulo}</b><span class="mut peq">${p.tipo === 'quiz' ? 'quiz' : 'página de vendas'} · ${relativo(p.atualizado)}</span></div></a>`)}</div>`
-      : html`<${Vazio} titulo="Nenhuma página ainda" texto="Crie uma página de vendas ou um quiz de pré-venda a partir de uma oferta escalada." acao="Criar página" onAcao=${() => novo('pagina')} />`}`;
+      : html`<div class="painel-box vazio-acao"><b>Nenhuma página ainda</b><p class="mut">Crie uma página de vendas ou um quiz de pré-venda a partir de uma oferta escalada. A IA escreve o texto; você ajusta e baixa o HTML.</p>
+          <div class="linha"><button class="pri" onClick=${() => novo('pagina')}>Criar página de vendas</button><button onClick=${() => novo('quiz')}>Criar quiz</button></div></div>`}`;
 }
 
 export function TelaPagina({ id }) {

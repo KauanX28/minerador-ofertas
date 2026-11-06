@@ -25,9 +25,9 @@ export function TelaEntregaveis() {
   const novo = async () => { const r = await post('/api/projetos', { tipo: 'entregavel', titulo: 'Novo entregável', dados: { formato: 'ebook', capitulos: [] } }); navegar('/entregavel/' + r.id); };
   if (!lista) return html`<${Esqueleto} />`;
   return html`<div class="cab"><div><h1>Entregável</h1><p>Monte o produto (e-book, planner, checklist, workbook ou desafio) com IA, capítulo por capítulo, e exporte em PDF.</p></div>
-      <button class="pri" onClick=${novo}><${Ic} n="mais" /> Novo entregável</button></div>
+      ${lista.length ? html`<button class="pri" onClick=${novo}>Criar entregável</button>` : null}</div>
     ${lista.length ? html`<div class="grade-3">${lista.map((p) => html`<a class="painel-box passo" href=${'/entregavel/' + p.id}><div><b>${p.titulo}</b><span class="mut peq">editado ${relativo(p.atualizado)}</span></div></a>`)}</div>`
-      : html`<${Vazio} titulo="Nenhum entregável ainda" texto="Comece pelo briefing: produto, público e promessa. A IA monta a estrutura e escreve os capítulos." acao="Criar o primeiro" onAcao=${novo} />`}`;
+      : html`<${Vazio} titulo="Nenhum entregável ainda" texto="Comece pelo briefing: produto, público e promessa. A IA monta a estrutura e escreve os capítulos." acao="Criar o primeiro entregável" onAcao=${novo} />`}`;
 }
 
 export function TelaEntregavel({ id }) {
