@@ -22,7 +22,8 @@ function PainelIA() {
   const [g, setG] = useState(chaves.gemini), [q, setQ] = useState(chaves.groq);
   const p = est.dados?.provedores || {};
   return html`<div class="painel-box"><div class="pb-cab"><h2>IA (grátis)</h2></div><div class="pb-corpo col-gap">
-    <div class="peq">No servidor: Gemini ${p.gemini ? '✓' : '—'} · Groq ${p.groq ? '✓' : '—'} ${!p.gemini && !p.groq ? html`<span class="mut">(configure GEMINI_API_KEY ou GROQ_API_KEY; veja o README)</span>` : null}</div>
+    <div class="peq">IA no servidor: Gemini ${p.gemini ? 'ligado' : 'desligado'}, Groq ${p.groq ? 'ligado' : 'desligado'}.</div>
+    ${!p.gemini && !p.groq ? html`<details class="tecnico"><summary>Como ligar a IA no servidor</summary><p class="peq">Defina <code>GEMINI_API_KEY</code> ou <code>GROQ_API_KEY</code> nas variáveis do servidor (o passo a passo está no README).</p></details>` : null}
     <p class="mut peq" style="margin:0">Ou salve sua própria chave grátis aqui. Ela fica só neste navegador e é usada quando o servidor não tem IA.
       Pegue em <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> ou <a href="https://console.groq.com/keys" target="_blank" rel="noopener">Groq</a>, sem cartão.</p>
     <div class="form-grade"><label class="campo">Chave do Gemini<input type="password" value=${g} onInput=${(e) => setG(e.target.value)} autocomplete="off" /></label>

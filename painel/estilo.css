@@ -270,6 +270,7 @@ fieldset.grupo legend { font-size: var(--t-1); font-weight: 500; color: var(--ti
 .painel-box > .pb-corpo { padding: var(--e-4); }
 .grade-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: var(--e-4); align-items: start; }
 .grade-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--e-4); align-items: start; }
+.grade-2 > *, .grade-3 > *, .grade-config > *, .hoje > *, .painel-box { min-width: 0; }
 
 /* leitura: os números do painel */
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); background: var(--sup); border: 1px solid var(--linha); border-radius: var(--r-3); margin-bottom: var(--e-4); overflow: hidden; }
@@ -301,7 +302,7 @@ fieldset.grupo legend { font-size: var(--t-1); font-weight: 500; color: var(--ti
 .md table { border-collapse: collapse; margin: 10px 0; width: 100%; font-size: var(--t-2); display: block; overflow-x: auto; }
 .md th, .md td { border: 1px solid var(--linha); padding: 6px 9px; text-align: left; vertical-align: top; } .md th { background: var(--sup-2); }
 .md blockquote { border-left: 3px solid var(--acento); margin: var(--e-3) 0; padding: 6px 14px; background: var(--sup-2); color: var(--tinta-2); }
-pre.prompt { white-space: pre-wrap; font-family: var(--fonte-mono); background: var(--sup-2); border: 1px solid var(--linha); border-radius: var(--r-2); padding: 10px var(--e-3); font-size: var(--t-1); line-height: 1.55; max-height: 220px; overflow: auto; margin: 0; color: var(--tinta-2); }
+pre.prompt { overflow-wrap: anywhere; white-space: pre-wrap; font-family: var(--fonte-mono); background: var(--sup-2); border: 1px solid var(--linha); border-radius: var(--r-2); padding: 10px var(--e-3); font-size: var(--t-1); line-height: 1.55; max-height: 220px; overflow: auto; margin: 0; color: var(--tinta-2); }
 textarea.mono, .modal-corpo textarea { font-family: var(--fonte-mono); font-size: var(--t-1); }
 .log { background: var(--sup-2); color: var(--tinta-2); border: 1px solid var(--linha); border-radius: var(--r-3); padding: var(--e-3) 14px; font: 12px/1.6 var(--fonte-mono); max-height: 320px; overflow: auto; white-space: pre-wrap; }
 .lista-def { display: grid; grid-template-columns: minmax(110px, 140px) 1fr; gap: 6px var(--e-3); font-size: var(--t-2); margin: 0; }
@@ -312,11 +313,18 @@ textarea.mono, .modal-corpo textarea { font-family: var(--fonte-mono); font-size
 .check .sim, .check .nao { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
 .check .sim { background: var(--sobe-fundo); color: var(--sobe); }
 .check .nao { background: var(--atencao-fundo); color: var(--atencao); }
+details.tecnico { font-size: var(--t-2); color: var(--suave); margin-top: var(--e-2); }
+details.tecnico > summary { cursor: pointer; color: var(--tinta-2); font-weight: 500; width: fit-content; }
+details.tecnico[open] > summary { margin-bottom: var(--e-2); }
+details.tecnico p, details.tecnico ol { margin-top: 0; color: var(--tinta-2); }
 .nota { width: 100%; border: 1px dashed var(--linha-forte); background: transparent; font-size: var(--t-2); padding: 4px var(--e-2); }
 
 /* ================= dados ================= */
 .tag { display: inline-flex; align-items: center; gap: 5px; font-size: var(--t-1); font-weight: 500; padding: 1px 7px; border-radius: var(--r-1); border: 1px solid var(--linha); color: var(--tinta-2); background: var(--sup); white-space: nowrap; line-height: 1.6; }
 .tag.st-validando { color: var(--sobe); border-color: transparent; background: var(--sobe-fundo); }
+.tag.st-forte { color: var(--cai); border-color: transparent; background: var(--cai-fundo); }
+.tag.st-escalada { color: var(--atencao); border-color: transparent; background: var(--atencao-fundo); }
+.tag.st-agora { color: var(--acento); border-color: transparent; background: var(--acento-fundo); }
 .tg-gw { color: var(--tinta-2); background: var(--sup-2); border-color: var(--linha); }
 .selo { background: var(--veu); color: var(--sobre-veu); font-size: 11px; font-weight: 500; padding: 2px 7px; border-radius: var(--r-1); }
 

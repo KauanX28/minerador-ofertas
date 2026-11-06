@@ -15,18 +15,21 @@ const COR_ACAO = { Escalar: 'st-validando', Cortar: 'st-forte', 'Trocar criativo
 
 export function TelaEscalar() {
   const [aba, setAba] = useState('desempenho');
-  return html`<div class="cab"><div><h1>Escalar com dados reais</h1><p>O que está dando lucro, o que cortar e o que escalar, com os números da sua conta e das suas vendas.</p></div></div>
+  return html`<div class="cab"><div><h1>Anúncios e vendas</h1><p>O que está dando lucro, o que cortar e o que escalar, com os números da sua conta e das suas vendas.</p></div></div>
     <${Abas} abas=${[['desempenho', 'Desempenho dos anúncios'], ['conta', 'Check-up da conta'], ['vendas', 'Vendas reais'], ['diario', 'Diário de testes']]} ativa=${aba} onTroca=${setAba} />
     ${aba === 'desempenho' ? html`<${Desempenho} />` : aba === 'conta' ? html`<${Conta} />` : aba === 'vendas' ? html`<${Vendas} />` : html`<${Diario} />`}`;
 }
 
-const ComoConfigurar = () => html`<div class="painel-box"><div class="pb-corpo">
-  <b>Conecte sua conta de anúncios (grátis, uma vez)</b>
+const ComoConfigurar = () => html`<div class="painel-box vazio-acao">
+  <b>Sua conta de anúncios ainda não está ligada</b>
+  <p class="mut">Ligada uma vez, esta aba mostra gasto, vendas, CPA e ROAS de cada anúncio e diz o que cortar, manter ou escalar. A ferramenta só lê os dados: nunca altera campanhas.</p>
+  <a class="botao pri" href="/calculadoras">Enquanto isso, calcular o CPA alvo</a>
+  <details class="tecnico"><summary>Passo a passo para quem administra o painel</summary>
   <ol class="lista-ia peq">
     <li>Em <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener">developers.facebook.com</a>, crie um app do tipo "Empresa" (pode ficar em modo de desenvolvimento: só você usa).</li>
     <li>Adicione o produto "API de Marketing" e gere um token com a permissão <code>ads_read</code> (de preferência de um usuário do sistema, que não expira).</li>
     <li>Na Vercel, crie as variáveis <code>META_ACCESS_TOKEN</code> (o token) e <code>META_AD_ACCOUNT_ID</code> (o número da conta, ex.: 123456789).</li>
-  </ol><p class="mut peq">A ferramenta só lê dados: nunca altera campanhas. O token fica no servidor, não no navegador.</p></div></div>`;
+  </ol><p class="mut peq">O token fica no servidor, não no navegador.</p></details></div>`;
 
 function Desempenho() {
   const [dias, setDias] = useState('7');
@@ -51,7 +54,7 @@ function Desempenho() {
       { t: 'ROAS', k: 'roas', cl: 'dir', v: (a) => (a.roas == null ? '—' : a.roas.toFixed(2)) },
       { t: 'CTR', k: 'ctr', cl: 'dir', v: (a) => html`${a.ctr.toFixed(2)}% <small class=${a.ctrTendencia >= 0 ? 'cresce' : 'cai'}>${a.ctrTendencia >= 0 ? '▲' : '▼'}</small>` },
       { t: 'Frequência', k: 'frequencia', cl: 'dir', v: (a) => a.frequencia.toFixed(1) },
-    ]} /></div>` : html`<${Vazio} titulo="Sem anúncios com gasto no período" />`}`;
+    ]} /></div>` : html`<${Vazio} titulo="Sem anúncios com gasto no período" texto="Escolha um período maior ou confira se as campanhas estão ativas." />`}`;
 }
 
 function Conta() {
@@ -64,7 +67,7 @@ function Conta() {
       <${Kpi} rot="Limite de gasto" val=${c.limiteGasto ? brl(c.limiteGasto) : 'sem limite'} sub=${c.limiteGasto ? `usado ${brl(c.gasto)}` : ''} /><${Kpi} rot="Anúncios com problema" val=${c.reprovados.length} /></div>
     ${c.reprovados.length ? html`<div class="painel-box"><${Tabela} linhas=${c.reprovados} colunas=${[{ t: 'Anúncio', v: (a) => html`<b>${a.nome}</b><div class="mut peq">${a.conjunto || ''}</div>` },
       { t: 'Situação', v: (a) => html`<span class="tag st-forte">${a.status === 'DISAPPROVED' ? 'reprovado' : 'com problema'}</span>` }, { t: 'Motivo', v: (a) => html`<span class="peq">${a.motivo || '—'}</span>` }]} /></div>`
-      : html`<div class="painel-box vazio">Nenhum anúncio reprovado. </div>`}`;
+      : html`<div class="painel-box vazio">Nenhum anúncio reprovado.</div>`}`;
 }
 
 function Vendas() {
@@ -82,9 +85,10 @@ function Vendas() {
       <${Kpi} rot="Conversão do bump" val=${v.taxaBump != null ? (100 * v.taxaBump).toFixed(1) + '%' : '—'} /><${Kpi} rot="Conversão do upsell" val=${v.taxaUpsell != null ? (100 * v.taxaUpsell).toFixed(1) + '%' : '—'} /><${Kpi} rot="Reembolsos" val=${fmt(v.reembolsos)} /></div>
     ${v.pedidos ? html`<button onClick=${aplicar}>Usar estes números nas Calculadoras</button>` : null}
     <div class="painel-box secao"><div class="pb-cab"><h2>Como ligar (webhook do gateway)</h2></div><div class="pb-corpo">
-      ${v.webhook ? html`<p class="peq" style="margin-top:0">No painel do gateway, em Webhooks/Integrações, cadastre a URL abaixo (troque <code>kiwify</code> pelo seu gateway e <code>SEU_TOKEN</code> pelo valor de <code>WEBHOOK_TOKEN</code>) para os eventos de compra aprovada e reembolso:</p>
-        <pre class="prompt">${base}kiwify?token=SEU_TOKEN</pre><button class="bt-p" onClick=${() => copiar(base + 'kiwify?token=SEU_TOKEN')}><${Ic} n="copiar" /> Copiar</button>`
-        : html`<p class="peq" style="margin-top:0">Crie a variável <code>WEBHOOK_TOKEN</code> na Vercel (uma senha longa qualquer). Depois cadastre no gateway: <code>${base}NOME_DO_GATEWAY?token=SEU_TOKEN</code>.</p>`}
+      ${v.webhook ? html`<p class="peq" style="margin-top:0">No painel do seu gateway, em Webhooks ou Integrações, cadastre o endereço abaixo para os eventos de compra aprovada e reembolso. Troque "kiwify" pelo nome do seu gateway e "SEU_TOKEN" pela senha do webhook que você definiu.</p>
+        <pre class="prompt">${base}kiwify?token=SEU_TOKEN</pre><div><button class="bt-p" onClick=${() => copiar(base + 'kiwify?token=SEU_TOKEN')}><${Ic} n="copiar" /> Copiar endereço</button></div>`
+        : html`<p class="peq" style="margin-top:0">As vendas ainda não estão ligadas. Quem administra o painel define uma senha para o webhook uma vez; depois é só cadastrar o endereço no gateway.</p>
+          <details class="tecnico"><summary>Passo a passo para quem administra o painel</summary><p class="peq">Crie a variável <code>WEBHOOK_TOKEN</code> na Vercel (uma senha longa qualquer). Depois cadastre no gateway: <code>${base}NOME_DO_GATEWAY?token=SEU_TOKEN</code>.</p></details>`}
       <p class="mut peq">Só ficam salvos valor, produto, tipo (principal, bump ou upsell) e situação. Nome, e-mail e CPF do comprador são descartados.</p></div></div>`;
 }
 
@@ -97,14 +101,14 @@ function Diario() {
   const linhas = lista.map((t) => ({ ...t.dados, id: t.id, titulo: t.titulo, cpa: t.dados.vendas ? t.dados.gasto / t.dados.vendas : null, roas: t.dados.gasto ? (t.dados.receita || 0) / t.dados.gasto : null }));
   const gasto = linhas.reduce((s, t) => s + Number(t.gasto || 0), 0), receita = linhas.reduce((s, t) => s + Number(t.receita || 0), 0);
   return html`<div class="barra-res"><span class="mut">${lista.length} testes · gasto ${brl(gasto)} · receita ${brl(receita)} · resultado ${brl(receita - gasto)}</span>
-      <button class="pri" onClick=${() => setEditar({ titulo: '', dados: { inicio: new Date().toISOString().slice(0, 10), resultado: 'rodando' } })}><${Ic} n="mais" /> Novo teste</button></div>
+      <button class="pri" onClick=${() => setEditar({ titulo: '', dados: { inicio: new Date().toISOString().slice(0, 10), resultado: 'rodando' } })}>Registrar teste</button></div>
     ${linhas.length ? html`<div class="painel-box"><${Tabela} linhas=${linhas} ordemInicial=${{ k: 'inicio', asc: false }} colunas=${[
       { t: 'Teste', k: 'titulo', v: (t) => html`<b>${t.titulo}</b><div class="mut peq">${t.oferta || ''}</div>` }, { t: 'Início', k: 'inicio', v: (t) => t.inicio },
       { t: 'Criativos', v: (t) => html`<span class="peq">${t.criativos || '—'}</span>` }, { t: 'Gasto', k: 'gasto', cl: 'dir', v: (t) => brl(Number(t.gasto || 0)) },
       { t: 'Vendas', k: 'vendas', cl: 'dir', v: (t) => t.vendas || 0 }, { t: 'CPA', k: 'cpa', cl: 'dir', v: (t) => (t.cpa ? brl(t.cpa) : '—') }, { t: 'ROAS', k: 'roas', cl: 'dir', v: (t) => (t.roas ? t.roas.toFixed(2) : '—') },
       { t: 'Resultado', k: 'resultado', v: (t) => html`<span class=${'tag ' + (t.resultado === 'aprovado' ? 'st-validando' : t.resultado === 'reprovado' ? 'st-forte' : 'st-agora')}>${t.resultado}</span>` },
       { t: '', cl: 'acoes', v: (t) => html`<button class="bt-p" onClick=${() => setEditar(lista.find((x) => x.id === t.id))}>Editar</button>` }]} /></div>`
-      : html`<${Vazio} titulo="Nenhum teste registrado" texto="Registre cada teste: oferta, criativos, gasto e resultado. Com o tempo você vê o que funciona para você." />`}
+      : html`<${Vazio} titulo="Nenhum teste registrado" texto="Registre cada teste com a oferta, os criativos, o gasto e o resultado. Com o tempo você vê o que funciona para você." />`}
     ${editar ? html`<${EditarTeste} t=${editar} onFechar=${() => setEditar(null)} onSalvo=${() => { setEditar(null); carregar(); }} />` : null}`;
 }
 

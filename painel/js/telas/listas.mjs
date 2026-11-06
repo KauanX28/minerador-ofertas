@@ -20,9 +20,9 @@ export function TelaListas() {
   const pastas = [...new Set(favs.map((f) => f.pasta).filter(Boolean))], tags = [...new Set(favs.flatMap(tagsDe))];
   const vis = favs.filter((f) => (!pasta || f.pasta === pasta) && (!tag || tagsDe(f).includes(tag)));
   if (!favs.length) return html`<div class="cab"><div><h1>Minhas listas</h1></div></div>
-    <${Vazio} titulo="Sua lista está vazia" texto="Clique na estrela de qualquer oferta para salvar. Ela entra na etapa Minerada e você acompanha até escalar." acao="Encontrar ofertas" href="/ofertas" />`;
+    <${Vazio} titulo="Sua lista está vazia" texto="Toque na estrela de qualquer oferta para salvar. Ela entra na etapa Minerada e você acompanha aqui até escalar." acao="Encontrar ofertas para salvar" href="/ofertas" />`;
   return html`
-    <div class="cab"><div><h1>Minhas listas</h1><p>Arraste os cards entre as etapas. Anunciantes salvos são recontados todo dia pelo robô.</p></div>
+    <div class="cab"><div><h1>Minhas listas</h1><p>Arraste os cards entre as etapas ou use as setas. O robô reconta os anunciantes salvos todo dia.</p></div>
       <div class="linha">
         <select value=${pasta} onChange=${(e) => setPasta(e.target.value)} aria-label="Pasta"><option value="">Todas as pastas</option>${pastas.map((p) => html`<option>${p}</option>`)}</select>
         <select value=${tag} onChange=${(e) => setTag(e.target.value)} aria-label="Tag"><option value="">Todas as tags</option>${tags.map((t) => html`<option>${t}</option>`)}</select></div></div>
@@ -32,15 +32,15 @@ export function TelaListas() {
         ${col.map((f) => html`<article class="kb-card" draggable="true" onDragStart=${() => setArr(f)} onDragEnd=${() => setArr(null)}>
           <a href=${linkDe(f)} target=${f.tipo === 'checkout' ? '_blank' : null} class="kb-tit">${f.nome || f.chave}</a>
           <div class="mut peq">${f.tipo === 'pagina' ? 'anunciante' : f.tipo === 'oferta' ? 'site' : 'checkout'}${f.pasta ? ' · ' + f.pasta : ''}</div>
-          ${f.pagina ? html`<div class="kb-met"><${Status} s=${f.pagina.status} /><span class="peq">${fmt(f.pagina.ativos)} anúncios</span>${f.pagina.var7 != null ? html`<span class=${'peq ' + (f.pagina.var7 >= 0 ? 'cresce' : 'cai')}>${f.pagina.var7 >= 0 ? '+' : ''}${f.pagina.var7} 7d</span>` : null}</div>` : null}
+          ${f.pagina ? html`<div class="kb-met"><${Status} s=${f.pagina.status} /><span class="peq">${fmt(f.pagina.ativos)} anúncios</span>${f.pagina.var7 != null ? html`<span class=${'peq ' + (f.pagina.var7 > 0 ? 'cresce' : f.pagina.var7 < 0 ? 'cai' : 'mut')}>${f.pagina.var7 > 0 ? '+' : ''}${f.pagina.var7} em 7 dias</span>` : null}</div>` : null}
           ${tagsDe(f).length ? html`<div class="kb-tags">${tagsDe(f).map((t) => html`<span class="tag">${t}</span>`)}</div>` : null}
           ${f.nota ? html`<p class="kb-nota">${f.nota}</p>` : null}
           <div class="kb-acoes">
-            <button class="bt-ic" disabled=${i === 0} title="Etapa anterior" aria-label="Etapa anterior" onClick=${() => mover(f, ETAPAS[i - 1][0])}>‹</button>
-            <button class="bt-ic" disabled=${i === ETAPAS.length - 1} title="Próxima etapa" aria-label="Próxima etapa" onClick=${() => mover(f, ETAPAS[i + 1][0])}>›</button>
+            <button class="bt-ic" disabled=${i === 0} title="Voltar uma etapa" aria-label="Voltar uma etapa" onClick=${() => mover(f, ETAPAS[i - 1][0])}><${Ic} n="esq" /></button>
+            <button class="bt-ic" disabled=${i === ETAPAS.length - 1} title="Avançar uma etapa" aria-label="Avançar uma etapa" onClick=${() => mover(f, ETAPAS[i + 1][0])}><${Ic} n="dir" /></button>
             <span style="flex:1" class="mut peq">${relativo(f.atualizado || f.criado)}</span>
-            <button class="bt-ic" title="Editar notas, tags e pasta" onClick=${() => setEditar(f)}>✎</button>
-            <button class="bt-ic" title="Remover" aria-label="Remover" onClick=${() => remover(f)}><${Ic} n="fechar" /></button></div>
+            <button class="bt-ic" title="Anotações, tags e pasta" aria-label="Anotações, tags e pasta" onClick=${() => setEditar(f)}><${Ic} n="estudio" /></button>
+            <button class="bt-ic" title="Tirar da lista" aria-label="Tirar da lista" onClick=${() => remover(f)}><${Ic} n="fechar" /></button></div>
         </article>`)}</section>`; })}</div>
     ${editar ? html`<${Editar} f=${editar} pastas=${pastas} onFechar=${() => setEditar(null)} onSalvar=${async (patch) => { await salvar(editar, patch); setEditar(null); aviso('Salvo'); }} />` : null}`;
 }
