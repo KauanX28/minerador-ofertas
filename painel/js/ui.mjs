@@ -34,12 +34,34 @@ const ICONES = {
   alvo: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4',
   menu: 'M3 6h18M3 12h18M3 18h18',
   mais: 'M12 5v14M5 12h14',
+  sobe: 'M6 15l6-6 6 6',
+  desce: 'M6 9l6 6 6-6',
+  mais3: 'M5 12h.01M12 12h.01M19 12h.01',
+  ajuda: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01',
+  estudio: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
+  validar: 'M9 12l2 2 4-4M12 2l8 3v6c0 5-3.5 9.5-8 11-4.5-1.5-8-6-8-11V5z',
+  conta: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21a8 8 0 0 1 16 0',
   ocultar: 'M17.9 17.9A10 10 0 0 1 12 20c-7 0-11-8-11-8a18 18 0 0 1 5.1-5.9M9.9 4.2A9 9 0 0 1 12 4c7 0 11 8 11 8a18 18 0 0 1-2.2 3.2M1 1l22 22',
 };
 export const Ic = ({ n, t = 16 }) => html`<svg class="ic" width=${t} height=${t} viewBox="0 0 24 24" aria-hidden="true"><path d=${ICONES[n] || ''} /></svg>`;
 
 export const Tag = ({ c = '', children, title }) => html`<span class=${'tag ' + c} title=${title}>${children}</span>`;
-export const Status = ({ s }) => (s ? html`<${Tag} c=${STATUS[s] || ''}>${s}</${Tag}>` : null);
+// Status como medidor: quantos segmentos acesos = quão escalada; a cor diz se sobe, se pede atenção ou se cai.
+const NIVEL = { 'Teste': [1, 'neutro'], 'Validando': [2, 'atencao'], 'Nova acelerando': [2, 'sobe', 'sobe'], 'Escalando agora': [3, 'sobe', 'sobe'],
+  'Escalada': [3, 'sobe'], 'Escalada forte': [4, 'sobe'], 'Saturando/caindo': [2, 'cai', 'desce'] };
+export function Status({ s, chapa }) {
+  if (!s) return null;
+  const [n, cor, seta] = NIVEL[s] || [1, 'neutro'];
+  return html`<span class=${'status ' + cor + (chapa ? ' chapa' : '')} title=${s}><span class="medidor" aria-hidden="true">${[1, 2, 3, 4].map((i) => html`<i class=${i <= n ? 'on' : ''}></i>`)}</span>${seta ? html`<${Ic} n=${seta} />` : null}${s}</span>`;
+}
+// Frase do veredito, a partir do status e da nota de modelagem.
+export function veredito(p) {
+  const [, cor] = NIVEL[p.status] || [1, 'neutro'];
+  const modelar = p.oportunidade >= 60 ? 'boa para modelar' : p.oportunidade >= 40 ? 'dá para modelar com cuidado' : 'concorrida para modelar';
+  const base = { 'Escalada forte': 'Escalada forte', 'Escalada': 'Escalada', 'Escalando agora': 'Escalando agora', 'Nova acelerando': 'Nova e acelerando',
+    'Validando': 'Ainda validando', 'Teste': 'Em teste', 'Saturando/caindo': 'Saturando' }[p.status] || p.status || 'Sem leitura ainda';
+  return { frase: p.status === 'Saturando/caindo' || p.status === 'Teste' ? base : `${base} · ${modelar}`, cor: cor === 'neutro' ? '' : cor };
+}
 export const Gws = ({ lista }) => (lista?.length ? lista.map((g) => html`<span class="tag tg-gw">${g}</span> `) : html`<span class="mut">—</span>`);
 export const TipoTag = ({ t }) => (t && t !== 'low' ? html`<span class="tag">${TIPOS_OFERTA[t] || t}</span>` : null);
 
@@ -54,14 +76,30 @@ export function Score({ n, fatores, mini }) {
   return html`<div class=${'score' + (mini ? ' mini' : '')} title=${titulo}><b>${n ?? '—'}</b><i><span style=${`width:${Math.min(100, n || 0)}%`}></span></i></div>`;
 }
 
-// Minigráfico de 30 dias (SVG puro: sem biblioteca, sem peso).
-export function Spark({ serie, w = 96, h = 28 }) {
-  if (!serie || serie.length < 2) return html`<span class="mut peq" title="Precisa de 2+ contagens">sem histórico</span>`;
+// Tendência de 30 dias: área suave e o último ponto destacado (SVG puro, sem biblioteca).
+export function Spark({ serie, w = 112, h = 32 }) {
+  if (!serie || serie.length < 2) return html`<span class="sem-hist" title="A tendência aparece a partir da segunda contagem (o robô reconta todo dia)">
+    <svg class="spark vazia" width="40" height=${h} aria-hidden="true"><line x1="1" x2="39" y1=${h / 2} y2=${h / 2} /></svg>tendência a partir de amanhã</span>`;
   const vs = serie.map((p) => p[1]), max = Math.max(...vs), min = Math.min(...vs), amp = max - min || 1;
-  const pts = vs.map((v, i) => `${(i / (vs.length - 1)) * (w - 2) + 1},${h - 2 - ((v - min) / amp) * (h - 4)}`).join(' ');
-  const sobe = vs.at(-1) >= vs[0];
-  return html`<svg class=${'spark ' + (sobe ? 'sobe' : 'desce')} width=${w} height=${h} viewBox=${`0 0 ${w} ${h}`} role="img" aria-label=${`de ${vs[0]} para ${vs.at(-1)} anúncios`}>
-    <title>${serie.map((p) => `${p[0]}: ${p[1]}`).join('\n')}</title><polyline points=${pts} /></svg>`;
+  const pad = 4, x = (i) => pad + (i / (vs.length - 1)) * (w - pad * 2), y = (v) => h - pad - ((v - min) / amp) * (h - pad * 2);
+  const pts = vs.map((v, i) => [x(i), y(v)]);
+  // curva suave (Catmull-Rom convertida em Bézier)
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    d += ` C${p1[0] + (p2[0] - p0[0]) / 6},${p1[1] + (p2[1] - p0[1]) / 6} ${p2[0] - (p3[0] - p1[0]) / 6},${p2[1] - (p3[1] - p1[1]) / 6} ${p2[0]},${p2[1]}`;
+  }
+  const fim = pts.at(-1), sobe = vs.at(-1) >= vs[0];
+  return html`<svg class=${'spark ' + (sobe ? 'sobe' : 'desce')} width=${w} height=${h} viewBox=${`0 0 ${w} ${h}`} role="img" aria-label=${`Anúncios ativos em 30 dias: de ${vs[0]} para ${vs.at(-1)}`}>
+    <title>${serie.map((p) => `${dataCurta(p[0])}: ${p[1]}`).join('\n')}</title>
+    <path class="area-s" d=${`${d} L${fim[0]},${h} L${pts[0][0]},${h} Z`} /><path class="linha-s" d=${d} />
+    <circle class="anel-s" cx=${fim[0]} cy=${fim[1]} r="4" /><circle class="ponto-s" cx=${fim[0]} cy=${fim[1]} r="2.6" /></svg>`;
+}
+
+// Variação em 7 dias, com o sinal na cor do significado.
+export function Delta({ v, rot = 'em 7 dias' }) {
+  if (v == null) return null;
+  return html`<span class=${'delta ' + (v > 0 ? 'sobe' : v < 0 ? 'cai' : '')}><b>${v > 0 ? '+' : ''}${fmt(v)}</b> ${rot}</span>`;
 }
 
 export function Grafico({ serie, h = 140 }) {
@@ -73,7 +111,7 @@ export function Grafico({ serie, h = 140 }) {
     <line x1="30" x2=${w - 10} y1=${y(0)} y2=${y(0)} class="eixo" /><line x1="30" x2=${w - 10} y1=${y(max)} y2=${y(max)} class="eixo fraco" />
     <text x="0" y=${y(max) + 4} class="rot">${max}</text><text x="0" y=${y(0) + 4} class="rot">0</text>
     <polygon points=${`${x(0)},${y(0)} ${pts} ${x(vs.length - 1)},${y(0)}`} class="area" /><polyline points=${pts} class="linha" />
-    ${serie.map((p, i) => html`<circle cx=${x(i)} cy=${y(p[1])} r="3"><title>${dataCurta(p[0])}: ${p[1]} anúncios</title></circle>`)}
+    ${serie.map((p, i) => html`<circle cx=${x(i)} cy=${y(p[1])} r=${i === serie.length - 1 ? 4 : 2.5} class=${i === serie.length - 1 ? 'fim' : ''}><title>${dataCurta(p[0])}: ${p[1]} anúncios</title></circle>`)}
     <text x="30" y=${h - 4} class="rot">${dataCurta(serie[0][0])}</text><text x=${w - 10} y=${h - 4} class="rot" text-anchor="end">${dataCurta(serie.at(-1)[0])}</text></svg>`;
 }
 
@@ -84,13 +122,13 @@ export const Ent = ({ img, t1, t2 }) => html`<div class="ent">${img ? html`<img 
 export function Ocultar({ pageId, nome, onOculto }) {
   const [feito, set] = useState(false);
   if (feito) return html`<span class="mut peq">oculto</span>`;
-  return html`<button class="bt-ic" title=${'Ocultar ' + (nome || '') + ' (marca grande ou não interessa)'} aria-label="Ocultar anunciante"
-    onClick=${async (e) => { e.preventDefault(); e.stopPropagation(); await post('/api/ocultar', { page_id: pageId }); set(true); aviso((nome || 'Anunciante') + ' oculto. Para mostrar de novo: Configurações → Anunciantes ignorados.'); onOculto?.(); }}><${Ic} n="ocultar" /></button>`;
+  return html`<button class="bt-ic" title=${'Ocultar ' + (nome || 'este anunciante') + ' de todas as listas'} aria-label=${'Ocultar ' + (nome || 'anunciante')}
+    onClick=${async (e) => { e.preventDefault(); e.stopPropagation(); await post('/api/ocultar', { page_id: pageId }); set(true); aviso((nome || 'Anunciante') + ' oculto. Para mostrar de novo, vá em Configurações, Anunciantes ocultos.'); onOculto?.(); }}><${Ic} n="ocultar" /></button>`;
 }
 
 export function Estrela({ tipo, chave, nome, on }) {
   const [ativo, set] = useState(!!on);
-  return html`<button class=${'bt-ic' + (ativo ? ' on' : '')} title=${ativo ? 'Remover de Minhas listas' : 'Salvar em Minhas listas'} aria-pressed=${ativo}
+  return html`<button class=${'bt-ic' + (ativo ? ' on' : '')} title=${ativo ? 'Tirar de Minhas listas' : 'Salvar em Minhas listas'} aria-label=${ativo ? 'Tirar de Minhas listas' : 'Salvar em Minhas listas'} aria-pressed=${ativo}
     onClick=${async (e) => { e.preventDefault(); e.stopPropagation(); await favoritar(tipo, chave, nome, ativo); set(!ativo); }}><${Ic} n="estrela" /></button>`;
 }
 
@@ -101,7 +139,7 @@ export const Esqueleto = ({ linhas = 6, cards }) => (cards
 export const Vazio = ({ titulo, texto, acao, onAcao, href }) => html`<div class="painel-box vazio-acao"><b>${titulo}</b>${texto ? html`<p class="mut">${texto}</p>` : null}
   ${acao ? (href ? html`<a class="botao pri" href=${href}>${acao}</a>` : html`<button class="pri" onClick=${onAcao}>${acao}</button>`) : null}</div>`;
 
-export const Erro = ({ msg }) => html`<div class="painel-box vazio-acao"><b>Não foi possível carregar</b><p class="mut">${msg}</p><button onClick=${() => location.reload()}>Tentar de novo</button></div>`;
+export const Erro = ({ msg }) => html`<div class="painel-box vazio-acao"><b>Esta parte não carregou</b><p class="mut">${msg}. Confira a conexão e tente de novo.</p><button onClick=${() => location.reload()}>Recarregar a página</button></div>`;
 
 export function Abas({ abas, ativa, onTroca }) {
   return html`<div class="abas" role="tablist">${abas.map(([k, nome, n]) => html`<button role="tab" aria-selected=${k === ativa} class=${k === ativa ? 'ativo' : ''} onClick=${() => onTroca(k)}>${nome}${n != null ? html` <small class="mut">${n}</small>` : null}</button>`)}</div>`;
@@ -123,29 +161,35 @@ export function Tabela({ linhas, colunas, ordemInicial, vazio = 'Nenhum resultad
       : html`<tr><td colspan=${colunas.length} class="vazio">${vazio}</td></tr>`}</tbody></table></div>`;
 }
 
-// Card do feed de ofertas.
+// Card do feed de ofertas: status, leitura (anúncios, dias, variações), tendência e o essencial da venda.
+const FORMATOS = { VIDEO: 'Vídeo', IMAGE: 'Imagem', CAROUSEL: 'Carrossel', DCO: 'Dinâmico' };
 export function CartaoOferta({ p, selecionado, onSelecionar }) {
   const [oculto, setOculto] = useState(false);
   if (oculto) return null;
+  const sub = p.produto || p.dominios?.[0] || p.titulo || '';
+  const formato = FORMATOS[p.formato] || p.formato;
+  const temPreco = p.preco || p.precoBrl != null;
+  const notaTit = `Nota ${p.score} de 100` + (p.fatores ? '\n' + p.fatores.map((f) => `${f.nome}: ${f.pontos} de ${f.peso}`).join('\n') : '') + (p.oportunidade != null ? `\n\nBoa para modelar: ${p.oportunidade}. ${p.motivoOport || ''}` : '');
   return html`<article class="card">
     <a href=${'/oferta/' + encodeURIComponent(p.page_id)} class="card-link" aria-label=${'Abrir ' + p.nome}>
       <div class="card-midia">${p.thumb ? html`<img src=${p.thumb} loading="lazy" alt="" />` : html`<div class="sem-img">${(p.nome || '?')[0]}</div>`}
-        <div class="card-selos"><${Status} s=${p.status} />${p.formato ? html`<span class="selo">${p.formato === 'VIDEO' ? 'Vídeo' : p.formato === 'IMAGE' ? 'Imagem' : p.formato}</span>` : null}</div></div>
+        <div class="card-selos"><${Status} s=${p.status} chapa />${formato ? html`<span class="selo">${formato}</span>` : null}</div></div>
       <div class="card-corpo">
-        <div class="card-tit"><b title=${p.nome}>${p.nome}</b><span class="mut peq" title=${p.produto || p.dominios?.[0] || ''}>${p.produto || p.dominios?.[0] || p.titulo || ''}</span></div>
-        <div class="card-met">
+        <div class="card-tit"><b title=${p.nome}>${p.nome}</b>${sub ? html`<span title=${sub}>${sub}</span>` : null}</div>
+        <div class="leitura">
           <div><b>${compacto(p.ativos)}</b><span>anúncios</span></div>
-          <div><b>${p.dias}</b><span>dias</span></div>
-          <div><b>${p.dupMax}x</b><span>variações</span></div>
-          <div><b><${Preco} preco=${p.preco} precoBrl=${p.precoBrl} /></b><span>preço</span></div>
+          <div><b>${p.dias ?? '—'}</b><span>dias</span></div>
+          <div><b>${p.dupMax ?? 1}x</b><span>variações</span></div>
         </div>
-        <div class="card-rod"><${Spark} serie=${p.serie} /><div class="card-gw">${(p.gateways || []).slice(0, 2).map((g) => html`<span class="tag tg-gw">${g}</span>`)}</div></div>
+        <div class="card-tend"><${Spark} serie=${p.serie} /><${Delta} v=${p.var7} /></div>
+        ${temPreco || p.gateways?.length ? html`<div class="card-meta">
+          ${temPreco ? html`<${Preco} preco=${p.preco} precoBrl=${p.precoBrl} />` : null}
+          ${temPreco && p.gateways?.length ? html`<span class="sep"></span>` : null}
+          ${p.gateways?.length ? html`<span>${p.gateways.slice(0, 2).join(', ')}</span>` : null}</div>` : null}
       </div></a>
     <div class="card-acoes">
-      <${Score} n=${p.score} fatores=${p.fatores} mini />
-      <span class="peq mut" title=${p.motivoOport}>modelar ${p.oportunidade}</span>
-      <span style="flex:1"></span>
-      ${onSelecionar ? html`<label class="bt-ic" title="Comparar"><input type="checkbox" checked=${selecionado} onChange=${() => onSelecionar(p.page_id)} /></label>` : null}
+      <span class="nota-card" title=${notaTit}>Nota <b>${p.score ?? '—'}</b></span>
+      ${onSelecionar ? html`<label class="check-l"><input type="checkbox" checked=${selecionado} onChange=${() => onSelecionar(p.page_id)} /> Comparar</label>` : html`<span style="flex:1"></span>`}
       <${Ocultar} pageId=${p.page_id} nome=${p.nome} onOculto=${() => setOculto(true)} />
       <${Estrela} tipo="pagina" chave=${p.page_id} nome=${p.nome} on=${p.favorito} />
     </div></article>`;
@@ -155,20 +199,20 @@ export function CartaoAnuncio({ a, onModelar }) {
   const dias = diasDesde(a.inicio);
   const [expirou, setExpirou] = useState(false);
   return html`<div class="ad">
-    <div class="ad-cab"><b title=${a.page_name}>${a.page_name || ''}</b>${a.ativo === 0 ? html`<span class="tag">inativo</span>` : null}</div>
+    <div class="ad-cab"><b title=${a.page_name}>${a.page_name || ''}</b>${a.ativo === 0 ? html`<span class="tag">saiu do ar</span>` : null}</div>
     <div class="ad-midia">${a.video && !expirou ? html`<video src=${a.video} poster=${a.thumb || ''} controls preload="metadata" onError=${() => setExpirou(true)}></video>`
-      : a.video && expirou ? html`<div class="expirou">${a.thumb ? html`<img src=${a.thumb} loading="lazy" alt="" />` : null}<button class="bt-p" onClick=${() => rodarTarefa({ tipo: 'renovar', pagina: a.page_id, pais: loja.pais })}>O link do vídeo expirou: renovar</button></div>` : a.thumb ? html`<img src=${a.thumb} loading="lazy" alt="" />` : html`<div style="height:80px"></div>`}
-      ${a.formato ? html`<span class="selo">${a.formato}</span>` : null}</div>
-    <div class="ad-met"><div><b>${dias ?? '—'}</b><span>dias</span></div><div><b>${a.dup || 1}x</b><span>variações</span></div><div><b title=${a.cta || ''}>${(a.cta || '—').slice(0, 12)}</b><span>CTA</span></div></div>
+      : a.video && expirou ? html`<div class="expirou">${a.thumb ? html`<img src=${a.thumb} loading="lazy" alt="" />` : null}<button class="bt-p" onClick=${() => rodarTarefa({ tipo: 'renovar', pagina: a.page_id, pais: loja.pais })}>Vídeo expirou: buscar de novo</button></div>` : a.thumb ? html`<img src=${a.thumb} loading="lazy" alt="" />` : html`<div style="height:80px"></div>`}
+      ${a.formato && !(a.video && !expirou) ? html`<span class="selo">${FORMATOS[a.formato] || a.formato}</span>` : null}</div>
+    <div class="ad-met"><div><b>${dias ?? '—'}</b><span>dias no ar</span></div><div><b>${a.dup || 1}x</b><span>variações</span></div><div class="cta"><b title=${a.cta || ''}>${a.cta || '—'}</b><span>botão</span></div></div>
     <div class="ad-info">${a.titulo ? html`<b>${a.titulo}</b>` : null}<div class="txt">${a.texto}</div>
       ${a.gateway ? html`<div><span class="tag tg-gw">${nomeGateway(a.gateway)}</span></div>` : null}</div>
     <div class="rod">
-      <button class="bt-p" title="Copiar texto" onClick=${() => copiar(a.texto || '')}><${Ic} n="copiar" /></button>
-      ${onModelar ? html`<button class="bt-p" onClick=${() => onModelar(a)}>Modelar</button>` : null}
-      ${a.video ? html`<a class="bt-p" href=${a.video} target="_blank" rel="noopener" download title="Baixar vídeo"><${Ic} n="baixar" /></a>` : null}
-      <a class="bt-p" href=${bib.anuncio(a.ad_id)} target="_blank" rel="noopener" title="Ver na Biblioteca"><${Ic} n="externo" /></a>
+      ${onModelar ? html`<button class="bt-p modelar" onClick=${() => onModelar(a)}>Modelar</button>` : html`<span style="margin-right:auto"></span>`}
+      <button class="bt-ic" title="Copiar texto do anúncio" aria-label="Copiar texto do anúncio" onClick=${() => copiar(a.texto || '')}><${Ic} n="copiar" /></button>
+      ${a.video ? html`<a class="bt-ic" href=${a.video} target="_blank" rel="noopener" download title="Baixar vídeo" aria-label="Baixar vídeo"><${Ic} n="baixar" /></a>` : null}
+      ${a.link ? html`<a class="bt-ic" href=${a.link} target="_blank" rel="noopener" title="Abrir a página de destino" aria-label="Abrir a página de destino"><${Ic} n="dominio" /></a>` : null}
+      <a class="bt-ic" href=${bib.anuncio(a.ad_id)} target="_blank" rel="noopener" title="Ver na Biblioteca de Anúncios" aria-label="Ver na Biblioteca de Anúncios"><${Ic} n="externo" /></a>
       <${Estrela} tipo="criativo" chave=${a.ad_id} nome=${(a.page_name || '') + ': ' + (a.titulo || a.texto || '').slice(0, 60)} />
-      ${a.link ? html`<a class="bt-p" href=${a.link} target="_blank" rel="noopener">Destino</a>` : null}
     </div></div>`;
 }
 

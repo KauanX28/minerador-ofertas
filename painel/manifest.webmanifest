@@ -4,8 +4,8 @@
   "description": "Ofertas low ticket escaladas: encontrar, validar, modelar e escalar.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0b1220",
-  "theme_color": "#0b1220",
+  "background_color": "#171B23",
+  "theme_color": "#2D43C4",
   "lang": "pt-BR",
   "icons": [
     { "src": "/icone-192.png", "sizes": "192x192", "type": "image/png" },

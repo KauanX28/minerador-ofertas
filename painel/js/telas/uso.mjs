@@ -15,7 +15,7 @@ export function TelaUso() {
     <div class="grade-3">${u.itens.map((i) => html`<div class="painel-box"><div class="pb-corpo">
       <div class="linha" style="justify-content:space-between"><b>${i.nome}</b>${i.alerta ? html`<span class="tag st-forte">acima de 80%</span>` : null}</div>
       <div class="res" style="margin-top:6px">${val(i)} <span class="mut peq">de ${lim(i)}</span></div>
-      ${i.pct != null ? html`<div class="barra-uso"><span style=${`width:${Math.min(100, i.pct)}%${i.alerta ? ';background:var(--erro)' : ''}`}></span></div><small class="mut">${i.pct}%</small>` : null}
+      ${i.pct != null ? html`<div class="barra-uso"><span style=${`width:${Math.min(100, i.pct)}%${i.alerta ? ';background:var(--cai)' : ''}`}></span></div><small class="mut">${i.pct}%</small>` : null}
       <div class="peq mut">${i.obs || ''}</div></div></div>`)}</div>
     <div class="grade-2 secao">
       <div><div class="secao-cab"><h2>Saúde do robô (24 h)</h2></div><div class="painel-box"><div class="pb-corpo">

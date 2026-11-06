@@ -57,7 +57,7 @@ export function TelaCalculadoras() {
           <${Campo} rot="Impostos (%)" v=${imp} set=${sImp} passo="0.1" /><${Campo} rot="Order bump (preço)" v=${bump} set=${sBump} /><${Campo} rot="Conversão do bump (%)" v=${bumpTx} set=${sBumpTx} passo="1" />
           <${Campo} rot="Upsell (preço)" v=${up} set=${sUp} /><${Campo} rot="Conversão do upsell (%)" v=${upTx} set=${sUpTx} passo="1" /><${Campo} rot="Margem desejada (%)" v=${margem} set=${sMargem} passo="1" /></div>
         <div class="grade-3 secao"><${Caixa} rot="Ticket médio líquido" val=${brl(ticket)} sub=${'bruto ' + brl(bruto)} /><${Caixa} rot="CPA máximo (empate)" val=${brl(ticket)} sub=${'ROAS de empate ' + (bruto / Math.max(ticket, 0.01)).toFixed(2)} />
-          <${Caixa} rot=${`CPA alvo (${margem}% de margem)`} val=${brl(alvo)} sub=${'ROAS alvo ' + (bruto / Math.max(alvo, 0.01)).toFixed(2)} cor="var(--ok)" /></div>
+          <${Caixa} rot=${`CPA alvo (${margem}% de margem)`} val=${brl(alvo)} sub=${'ROAS alvo ' + (bruto / Math.max(alvo, 0.01)).toFixed(2)} cor="var(--sobe)" /></div>
         <p class="peq mut">As taxas variam por plataforma, plano e forma de pagamento: confira na sua. De 4 a 6 order bumps e um upsell aumentam o ticket e permitem pagar um CPA maior.</p></div></div>
       <div class="painel-box"><div class="pb-cab"><h2>Plano de campanha</h2><span class="mut peq">teste → pré-escala → escala</span></div><div class="pb-corpo">
         <label class="campo">Estrutura<select value=${est} onChange=${(ev) => setEst(ev.target.value)}>${Object.entries(window.ESTRUTURAS || {}).map(([k, x]) => html`<option value=${k}>${x.nome}</option>`)}</select></label>
@@ -68,7 +68,7 @@ export function TelaCalculadoras() {
         <p class="peq mut">Cada criativo gasta pelo menos 1 ticket e roda de 2 a 3 dias antes da decisão. Corte o que passar de 1 a 1,5 ticket sem venda.</p></div></div>
       <div class="painel-box"><div class="pb-cab"><h2>Projeção de escala</h2></div><div class="pb-corpo">
         <div class="form-grade"><${Campo} rot="Investimento por dia" v=${inv} set=${sInv} passo="10" /><${Campo} rot="CPA atual" v=${cpa} set=${sCpa} /></div>
-        <div class="grade-3 secao"><${Caixa} rot="Vendas por dia" val=${vendas.toFixed(1)} /><${Caixa} rot="Lucro por dia" val=${brl(lucro)} cor=${lucro >= 0 ? 'var(--ok)' : 'var(--erro)'} /><${Caixa} rot="Lucro em 30 dias" val=${brl(lucro * 30)} /></div>
+        <div class="grade-3 secao"><${Caixa} rot="Vendas por dia" val=${vendas.toFixed(1)} /><${Caixa} rot="Lucro por dia" val=${brl(lucro)} cor=${lucro >= 0 ? 'var(--sobe)' : 'var(--cai)'} /><${Caixa} rot="Lucro em 30 dias" val=${brl(lucro * 30)} /></div>
         <p class="peq mut">Usa o ticket médio líquido calculado ao lado.</p></div></div>
     </div>
     <${Rastreamento} />
